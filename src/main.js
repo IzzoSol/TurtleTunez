@@ -43,6 +43,8 @@ const state = {
   lastChordKey: null,
   lastChordTime: 0,
   streamStarted: false,
+  stream: null,
+  animationFrameId: null,
 };
 
 function clamp(value, min, max) {
@@ -83,6 +85,11 @@ function getChordNotes(rootMidi, mode, voicingQuality) {
 function ensureAudio() {
   if (!state.audioContext) {
     const AudioCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtor) {
+      updateStatus('Web Audio unavailable');
+      return false;
+    }
+
     state.audioContext = new AudioCtor();
     state.masterGain = state.audioContext.createGain();
     state.masterGain.gain.value = 0.25;
@@ -92,6 +99,8 @@ function ensureAudio() {
   if (state.audioContext.state === 'suspended') {
     state.audioContext.resume();
   }
+
+  return true;
 }
 
 function stopActiveOscillators() {
@@ -237,8 +246,35 @@ function drawLandmarks(result) {
 
   if (!result || !result.landmarks) return;
 
+  const connections = [
+    [0, 1, 2, 3, 4],
+    [0, 5, 6, 7, 8],
+    [5, 9, 10, 11, 12],
+    [9, 13, 14, 15, 16],
+    [13, 17, 18, 19, 20],
+    [0, 17, 18, 19, 20],
+  ];
+
   result.landmarks.forEach((landmarks, index) => {
     const color = index === 0 ? '#7dd3fc' : '#a78bfa';
+
+    connections.forEach((path) => {
+      ctx.beginPath();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      path.forEach((pointIndex, pointOffset) => {
+        const point = landmarks[pointIndex];
+        const x = point.x * width;
+        const y = point.y * height;
+
+        if (pointOffset === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+      ctx.stroke();
+    });
 
     landmarks.forEach((point) => {
       const x = point.x * width;
@@ -315,8 +351,11 @@ function initKeySelect() {
 }
 
 async function initCamera() {
-  ensureAudio();
+  if (!ensureAudio()) return;
   if (state.streamStarted) return;
+
+  startButton.disabled = true;
+  startButton.textContent = 'Starting...';
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -324,6 +363,7 @@ async function initCamera() {
       audio: false,
     });
 
+    state.stream = stream;
     video.srcObject = stream;
     await video.play();
 
@@ -346,23 +386,61 @@ async function initCamera() {
     });
 
     state.streamStarted = true;
+    startButton.textContent = 'Stop camera';
     updateStatus('Tracking live');
-    requestAnimationFrame(loop);
+    state.animationFrameId = requestAnimationFrame(loop);
   } catch (error) {
     console.error(error);
     updateStatus('Camera unavailable');
+    startButton.textContent = 'Start camera';
+  } finally {
+    startButton.disabled = false;
   }
+}
+
+function stopCamera() {
+  if (state.animationFrameId) {
+    cancelAnimationFrame(state.animationFrameId);
+    state.animationFrameId = null;
+  }
+
+  if (state.stream) {
+    state.stream.getTracks().forEach((track) => track.stop());
+    state.stream = null;
+  }
+
+  state.streamStarted = false;
+  state.handLandmarker = null;
+  video.srcObject = null;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  startButton.textContent = 'Start camera';
+  updateStatus('Camera off');
 }
 
 function loop() {
   detectHands();
-  requestAnimationFrame(loop);
+  if (state.streamStarted) {
+    state.animationFrameId = requestAnimationFrame(loop);
+  }
 }
 
 startButton.addEventListener('click', () => {
+  if (state.streamStarted) {
+    stopCamera();
+    return;
+  }
+
   initCamera();
 });
 
 initKeySelect();
 renderSynth();
 updateStatus('Ready');
+
+window.addEventListener('beforeunload', () => {
+  stopActiveOscillators();
+  stopCamera();
+  if (state.audioContext && state.audioContext.close) {
+    state.audioContext.close();
+  }
+});
