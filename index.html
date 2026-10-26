@@ -16,9 +16,14 @@
         <div class="brand-row">
           <div class="brand-mark">T</div>
           <div>
-            <p class="eyebrow">Gesture Synth</p>
+            <p class="eyebrow">Gesture Studio</p>
             <h1>TurtleTunez</h1>
           </div>
+        </div>
+
+        <div class="mode-row" role="group" aria-label="Play mode">
+          <button type="button" class="mode-chip is-active" data-mode="solo">Solo</button>
+          <button type="button" class="mode-chip" data-mode="duo">Duo</button>
         </div>
 
         <div class="controls">
@@ -33,9 +38,41 @@
               <option value="triangle">Triangle</option>
               <option value="sawtooth">Sawtooth</option>
               <option value="square">Square</option>
+              <option value="sine">Sine</option>
             </select>
           </label>
+
+          <label>
+            Beat pattern
+            <select id="drumPatternSelect">
+              <option value="trap">Trap</option>
+              <option value="house">House</option>
+              <option value="hiphop">Hip-Hop</option>
+              <option value="lofi">Lo-Fi</option>
+              <option value="techno">Techno</option>
+            </select>
+          </label>
+
+          <div class="bpm-row">
+            <label for="bpmInput">BPM</label>
+            <input id="bpmInput" type="number" min="50" max="200" step="1" value="100" />
+          </div>
         </div>
+
+        <section class="seq-box" aria-label="Step sequencer">
+          <h2>Steps</h2>
+          <div class="seq-grid" id="seqGrid"></div>
+        </section>
+
+        <section class="agents-box" aria-label="Backing agents">
+          <h2>Agent band</h2>
+          <div class="agent-row">
+            <button type="button" class="agent-chip" data-agent="drums">🥁 Drums</button>
+            <button type="button" class="agent-chip" data-agent="bass">🎸 Bass</button>
+            <button type="button" class="agent-chip" data-agent="arp">✨ Arp</button>
+            <button type="button" class="agent-chip" data-agent="pad">☁️ Pad</button>
+          </div>
+        </section>
 
         <div class="stats">
           <div class="stat-card">
@@ -69,21 +106,31 @@
             <li><strong>Right wrist height:</strong> volume</li>
             <li><strong>Right wrist tilt:</strong> filter sweep</li>
           </ul>
+          <p class="duo-hint" id="duoHint" hidden>
+            Duo mode: player 2’s left hand picks the beat pattern, right hand rolls the drums.
+          </p>
         </div>
 
         <button id="startButton" class="start-button" type="button">Start camera</button>
         <p class="camera-help" style="font-size:12px;color:#888;margin-top:8px;">
-          If camera is blocked: check browser settings (chrome://settings/content/camera) and Windows Settings &gt; Privacy &gt; Camera. Make sure your browser is allowed.
+          If camera is blocked: check browser settings (chrome://settings/content/camera) and Windows Settings > Privacy > Camera. Make sure your browser is allowed.
         </p>
       </aside>
 
-      <main class="panel panel--right">
+      <main class="panel panel--center">
+        <div class="viz-wrap">
+          <canvas id="vizCanvas"></canvas>
+          <div class="viz-label">Cymatics</div>
+        </div>
+      </main>
+
+      <section class="panel panel--right">
         <div class="camera-wrap">
           <video id="video" autoplay playsinline muted></video>
           <canvas id="overlay"></canvas>
           <div class="status-badge" id="statusBadge" role="status" aria-live="polite">Ready</div>
         </div>
-      </main>
+      </section>
     </div>
 
     <script type="module" src="/src/main.js"></script>

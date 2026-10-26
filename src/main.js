@@ -1,5 +1,8 @@
 import './styles.css';
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
+import { DrumMachine } from './drum-machine.js';
+import { BassAgent, ArpAgent, PadAgent } from './band-agents.js';
+import { CymaticsVisualizer } from './visualizer.js';
 
 const MEDIAPIPE_VERSION = '0.10.22';
 // Use local wasm files (served from public/wasm) to avoid CDN issues
@@ -17,6 +20,7 @@ const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
 const PITCH_NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
 const KEY_SEMITONES = { C: 0, Db: 1, D: 2, Eb: 3, E: 4, F: 5, Gb: 6, G: 7, Ab: 8, A: 9, Bb: 10, B: 11 };
 const KEY_OPTIONS = Object.keys(KEY_SEMITONES);
+const PATTERN_ORDER = ['trap', 'house', 'hiphop', 'lofi', 'techno'];
 
 const HAND_BONES = [
   [0, 1, 2, 3, 4],
@@ -35,12 +39,28 @@ const startButton = $('startButton');
 const keySelect = $('keySelect');
 const waveformSelect = $('waveformSelect');
 const statusBadge = $('statusBadge');
+const drumPatternSelect = $('drumPatternSelect');
+const bpmInput = $('bpmInput');
+const seqGrid = $('seqGrid');
+const vizCanvas = $('vizCanvas');
+const duoHint = $('duoHint');
+const modeChips = Array.from(document.querySelectorAll('.mode-chip'));
+const agentChips = Array.from(document.querySelectorAll('.agent-chip'));
+
 const readouts = {
   chord: $('chordValue'),
   quality: $('qualityValue'),
   volume: $('volumeValue'),
   filter: $('filterValue'),
 };
+
+// Visualizer runs even before audio starts (idle cymatics), then rebinds to the real analyser.
+let vizInstance = null;
+function ensureVisualizer(analyser) {
+  vizInstance?.dispose();
+  vizInstance = new CymaticsVisualizer(vizCanvas, analyser);
+  vizInstance.start();
+}
 
 const state = {
   session: 0, // bumped on every start/stop so stale async work can detect it is outdated
@@ -52,7 +72,7 @@ const state = {
   lastVideoTime: -1,
   key: 'C',
   waveform: waveformSelect.value,
-  audio: null, // { ctx, master, filter, voices } created on first user gesture
+  audio: null, // { ctx, master, filter, voices, analyser, drums, agents, viz }
   left: { candidateKey: null, count: 0, value: null },
   right: { candidateKey: null, count: 0, value: null },
   lastRightSeen: 0,
@@ -61,6 +81,13 @@ const state = {
   musicSignature: '',
   badgeText: '',
   readoutText: {},
+  bpm: 100,
+  mode: 'solo',
+  agentFlags: { drums: false, bass: false, arp: false, pad: false },
+  seqCustom: null, // { kick:[16], snare:[16], hihat:[16], clap:[16] }
+  chordNotes: [48, 52, 55],
+  playheadStep: -1,
+  lastAgentSync: 0,
 };
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -185,9 +212,14 @@ function ensureAudio() {
   if (!AudioCtor) return false;
 
   const ctx = new AudioCtor();
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 1024;
+  analyser.smoothingTimeConstant = 0.82;
+  analyser.connect(ctx.destination);
+
   const master = ctx.createGain();
   master.gain.value = 0;
-  master.connect(ctx.destination);
+  master.connect(analyser);
 
   const filter = ctx.createBiquadFilter();
   filter.type = 'lowpass';
@@ -207,7 +239,19 @@ function ensureAudio() {
     return { osc, gain };
   });
 
-  state.audio = { ctx, master, filter, voices };
+  const drums = new DrumMachine(ctx, master);
+  drums.setBpm(state.bpm);
+  drums.onStep((step) => setPlayhead(step));
+
+  const agents = {
+    bass: new BassAgent(ctx, master),
+    arp: new ArpAgent(ctx, master),
+    pad: new PadAgent(ctx, master),
+  };
+
+  ensureVisualizer(analyser);
+
+  state.audio = { ctx, master, filter, voices, analyser, drums, agents };
   return true;
 }
 
@@ -238,6 +282,32 @@ function applyWaveform(type) {
   });
 }
 
+/* ---------- Studio layers (drums + agents) ---------- */
+
+function currentPattern() {
+  return state.seqCustom || DrumMachine.patterns[drumPatternSelect.value] || DrumMachine.patterns.trap;
+}
+
+function syncStudioToState() {
+  if (!state.audio) return;
+  state.audio.drums.setBpm(state.bpm);
+  if (state.seqCustom) state.audio.drums.setCustom(state.seqCustom);
+  const shared = { chordNotes: state.chordNotes, bpm: state.bpm };
+  state.audio.agents.bass.update(shared);
+  state.audio.agents.arp.update(shared);
+  state.audio.agents.pad.update(shared);
+}
+
+function setAgentEnabled(name, on) {
+  state.agentFlags[name] = on;
+  if (!state.audio) return;
+  if (name === 'drums') {
+    state.audio.drums.setEnabled(on && state.running);
+  } else {
+    state.audio.agents[name]?.setEnabled(on && state.running);
+  }
+}
+
 /* ---------- Per-frame logic ---------- */
 
 function updateMusic(now) {
@@ -253,6 +323,7 @@ function updateMusic(now) {
   if (chord && signature !== state.musicSignature) {
     state.musicSignature = signature;
     applyChord(chord.notes);
+    state.chordNotes = chord.notes;
   }
 
   const { ctx, master, filter } = state.audio;
@@ -260,6 +331,11 @@ function updateMusic(now) {
   if (now - state.lastRightSeen > HAND_LOST_MS) state.volumeTarget = 0;
   master.gain.setTargetAtTime(state.volumeTarget * MAX_VOLUME, t, 0.06);
   filter.frequency.setTargetAtTime(state.filterHz, t, 0.08);
+
+  if (now - state.lastAgentSync > 250) {
+    state.lastAgentSync = now;
+    syncStudioToState();
+  }
 
   const romanIndex = chordSource ? chordSource.degree : 0;
   const numeral = ROMAN[romanIndex];
@@ -307,6 +383,30 @@ function drawFrame(result) {
   });
 }
 
+function applyDuoHands(lefts, rights) {
+  // Player 2's left hand: finger count selects the beat pattern.
+  const p2Left = lefts[1];
+  if (p2Left) {
+    const fingers = countExtendedFingers(p2Left);
+    const patternName = PATTERN_ORDER[clamp(fingers, 0, PATTERN_ORDER.length - 1)];
+    if (drumPatternSelect.value !== patternName) {
+      drumPatternSelect.value = patternName;
+      state.seqCustom = null;
+      buildSeqGrid();
+      setStatus(`Duo · beat: ${DrumMachine.patterns[patternName].name}`);
+    }
+  }
+
+  // Player 2's right hand: height scales the drum bus, tilt adds swing.
+  const p2Right = rights[1];
+  if (p2Right && state.audio) {
+    const drumGain = clamp(1 - p2Right[0].y, 0.15, 1);
+    state.audio.drums.out.gain.setTargetAtTime(drumGain, state.audio.ctx.currentTime, 0.08);
+    const swing = clamp(Math.abs((p2Right[9].x + p2Right[13].x) / 2 - p2Right[0].x) * 0.35, 0, 0.12);
+    state.audio.drums.swing = swing;
+  }
+}
+
 function processFrame(now) {
   // Only run detection when the camera has produced a new frame.
   if (video.currentTime === state.lastVideoTime) return;
@@ -315,13 +415,16 @@ function processFrame(now) {
   const result = state.handLandmarker.detectForVideo(video, now);
   drawFrame(result);
 
-  let leftLm = null;
-  let rightLm = null;
+  const lefts = [];
+  const rights = [];
   result.handedness.forEach((categories, i) => {
     const label = categories[0]?.categoryName;
-    if (label === 'Left') leftLm = result.landmarks[i];
-    else if (label === 'Right') rightLm = result.landmarks[i];
+    if (label === 'Left') lefts.push(result.landmarks[i]);
+    else if (label === 'Right') rights.push(result.landmarks[i]);
   });
+
+  const leftLm = lefts[0] ?? null;
+  const rightLm = rights[0] ?? null;
 
   // A lost hand keeps its last confirmed gesture (left) or fades out (right); re-acquiring must re-confirm.
   if (leftLm) {
@@ -342,7 +445,9 @@ function processFrame(now) {
     state.right.count = 0;
   }
 
-  setStatus(`Live · L ${leftLm ? '●' : '○'}  R ${rightLm ? '●' : '○'}`);
+  if (state.mode === 'duo') applyDuoHands(lefts, rights);
+
+  setStatus(`Live · L ${leftLm ? '●' : '○'}  R ${rightLm ? '●' : '○'}${state.mode === 'duo' ? `  P2 ${lefts[1] || rights[1] ? '●' : '○'}` : ''}`);
   updateMusic(now);
 }
 
@@ -381,7 +486,7 @@ async function createHandLandmarker() {
   const vision = await FilesetResolver.forVisionTasks(WASM_BASE);
   const options = {
     runningMode: 'VIDEO',
-    numHands: 2,
+    numHands: state.mode === 'duo' ? 4 : 2,
     minHandDetectionConfidence: 0.4,
     minTrackingConfidence: 0.4,
   };
@@ -473,6 +578,13 @@ async function startCamera() {
     setStartButton('Stop camera');
     setStatus('Live · L ○  R ○');
     if (state.audio?.ctx.state === 'suspended') state.audio.ctx.resume();
+
+    syncStudioToState();
+    if (state.agentFlags.drums) state.audio.drums.setEnabled(true);
+    Object.entries(state.agentFlags).forEach(([name, on]) => {
+      if (on && name !== 'drums') state.audio.agents[name]?.setEnabled(true);
+    });
+
     state.rafId = requestAnimationFrame(loop);
   } catch (error) {
     if (session !== state.session) return;
@@ -502,6 +614,12 @@ function stopCamera() {
   state.handLandmarker?.close();
   state.handLandmarker = null;
 
+  if (state.audio) {
+    state.audio.drums.setEnabled(false);
+    Object.values(state.audio.agents).forEach((agent) => agent.setEnabled(false));
+    setPlayhead(-1);
+  }
+
   silence();
   if (state.audio?.ctx.state === 'running') state.audio.ctx.suspend();
   state.volumeTarget = 0;
@@ -517,7 +635,67 @@ function toggleCamera() {
   else startCamera();
 }
 
+/* ---------- Step sequencer UI ---------- */
+
+function buildSeqGrid() {
+  const pattern = currentPattern();
+  seqGrid.innerHTML = '';
+  const cells = [];
+  DrumMachine.rows.forEach((row) => {
+    for (let step = 0; step < 16; step += 1) {
+      const cell = document.createElement('div');
+      cell.className = 'seq-cell';
+      cell.dataset.row = row;
+      cell.dataset.step = String(step);
+      if (pattern[row]?.[step]) cell.classList.add('on');
+      cell.addEventListener('click', () => {
+        const custom = state.seqCustom || {
+          kick: [...(currentPattern().kick || [])],
+          snare: [...(currentPattern().snare || [])],
+          hihat: [...(currentPattern().hihat || [])],
+          clap: [...(currentPattern().clap || [])],
+        };
+        custom[row][step] = custom[row][step] ? 0 : 1;
+        state.seqCustom = custom;
+        cell.classList.toggle('on');
+        if (state.audio) state.audio.drums.setCustom(custom);
+      });
+      seqGrid.appendChild(cell);
+      cells.push(cell);
+    }
+  });
+}
+
+function setPlayhead(step) {
+  if (state.playheadStep === step) return;
+  const prev = state.playheadStep;
+  state.playheadStep = step;
+  const cells = seqGrid.children;
+  const toggle = (s, on) => {
+    for (let row = 0; row < DrumMachine.rows.length; row += 1) {
+      const idx = row * 16 + s;
+      if (cells[idx]) cells[idx].classList.toggle('playhead', on);
+    }
+  };
+  if (prev >= 0) toggle(prev, false);
+  if (step >= 0) toggle(step, true);
+}
+
 /* ---------- Controls ---------- */
+
+function setMode(mode) {
+  state.mode = mode;
+  modeChips.forEach((chip) => chip.classList.toggle('is-active', chip.dataset.mode === mode));
+  duoHint.hidden = mode !== 'duo';
+  // Re-create the landmarker with the new hand count on next start.
+  if (state.handLandmarker) {
+    state.handLandmarker.close();
+    state.handLandmarker = null;
+  }
+  if (state.running) {
+    setStatus('Restart the camera to apply the new mode');
+  }
+}
 
 function initControls() {
   KEY_OPTIONS.forEach((key) => {
@@ -540,12 +718,46 @@ function initControls() {
     setStatus(`Waveform: ${state.waveform}`);
   });
 
+  bpmInput.addEventListener('change', () => {
+    state.bpm = clamp(Number(bpmInput.value) || 100, 50, 200);
+    bpmInput.value = String(state.bpm);
+    syncStudioToState();
+    setStatus(`BPM: ${state.bpm}`);
+  });
+
+  drumPatternSelect.addEventListener('change', () => {
+    state.seqCustom = null;
+    buildSeqGrid();
+    if (state.audio) {
+      state.audio.drums.setPattern(drumPatternSelect.value);
+      if (state.agentFlags.drums) state.audio.drums.setEnabled(true);
+    }
+    setStatus(`Beat: ${DrumMachine.patterns[drumPatternSelect.value].name}`);
+  });
+
+  modeChips.forEach((chip) => {
+    chip.addEventListener('click', () => setMode(chip.dataset.mode));
+  });
+
+  agentChips.forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const name = chip.dataset.agent;
+      const on = !state.agentFlags[name];
+      chip.classList.toggle('is-active', on);
+      setAgentEnabled(name, on);
+    });
+  });
+
+  buildSeqGrid();
+
   startButton.addEventListener('click', toggleCamera);
   window.addEventListener('pagehide', () => {
     stopCamera();
     state.audio?.ctx.close();
+    vizInstance?.dispose();
   });
 }
 
 initControls();
+ensureVisualizer(null); // idle cymatics before the camera starts
 setStatus('Ready — start the camera to play');
