@@ -2,14 +2,14 @@ import './styles.css';
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 
 const MEDIAPIPE_VERSION = '0.10.22';
-const WASM_BASE = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MEDIAPIPE_VERSION}/wasm`;
-const MODEL_URL =
-  'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+// Use local wasm files (served from public/wasm) to avoid CDN issues
+const WASM_BASE = '/wasm';
+const MODEL_URL = '/hand_landmarker.task';
 
 const VOICE_COUNT = 5;
 const CONFIRM_FRAMES = 4; // consecutive frames a gesture must hold before it changes the music
 const HAND_LOST_MS = 500; // right-hand loss fades volume out after this long
-const MAX_VOLUME = 0.35;
+const MAX_VOLUME = 0.5;
 
 const SCALE_MAJOR = [0, 2, 4, 5, 7, 9, 11];
 const SCALE_MINOR = [0, 2, 3, 5, 7, 8, 10];
@@ -127,7 +127,7 @@ function classifyRightHand(lm) {
   return {
     voicing: Math.max(1, countExtendedFingers(lm)),
     octave: isThumbExtended(lm) ? 1 : 0,
-    volume: clamp((0.6 - wrist.y) / 0.5, 0, 1),
+    volume: clamp(Math.max(0.2, (0.7 - wrist.y) / 0.4), 0, 1),
     filterHz: clamp(1200 * Math.pow(2, tiltX * 8), 250, 6000),
   };
 }
@@ -364,14 +364,16 @@ function describeCameraError(error) {
   switch (error?.name) {
     case 'NotAllowedError':
     case 'SecurityError':
-      return 'Camera blocked — allow camera access in your browser and try again.';
+      return 'Camera blocked — check browser settings and Windows privacy settings (Settings > Privacy > Camera). Make sure your browser is allowed to access the camera.';
     case 'NotFoundError':
     case 'OverconstrainedError':
       return 'No camera found on this device.';
     case 'NotReadableError':
-      return 'Camera is in use by another app.';
+      return 'Camera is in use by another app. Close other apps using the camera and try again.';
+    case 'AbortError':
+      return 'Camera start was aborted. Try again.';
     default:
-      return 'Could not start the camera.';
+      return `Could not start the camera: ${error?.name || 'unknown error'}. Check browser and Windows camera permissions.`;
   }
 }
 
@@ -380,8 +382,8 @@ async function createHandLandmarker() {
   const options = {
     runningMode: 'VIDEO',
     numHands: 2,
-    minHandDetectionConfidence: 0.55,
-    minTrackingConfidence: 0.55,
+    minHandDetectionConfidence: 0.4,
+    minTrackingConfidence: 0.4,
   };
   try {
     return await HandLandmarker.createFromOptions(vision, {
@@ -400,7 +402,7 @@ async function createHandLandmarker() {
 async function startCamera() {
   if (state.running || state.starting) return;
   if (!navigator.mediaDevices?.getUserMedia) {
-    setStatus('Camera needs HTTPS or localhost');
+    setStatus('Camera needs HTTPS or localhost — open http://localhost:5173');
     return;
   }
 
@@ -409,14 +411,37 @@ async function startCamera() {
   setStartButton('Cancel', { disabled: false });
   setStatus('Requesting camera…');
 
+  // Check camera permission status first (if supported)
+  try {
+    const perm = await navigator.permissions?.query({ name: 'camera' });
+    if (perm?.state === 'denied') {
+      setStatus('Camera permission denied — open browser settings (chrome://settings/content/camera) and allow camera access for localhost');
+      stopCamera();
+      return;
+    }
+  } catch {
+    // Permissions API not supported — proceed with getUserMedia
+  }
+
   // Created inside the click handler, so browsers allow the audio context to start.
   if (!ensureAudio()) setStatus('Web Audio unavailable — tracking only');
 
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
-      audio: false,
-    });
+    // Try with facingMode first, fall back to simpler constraints if blocked
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+        audio: false,
+      });
+    } catch (firstErr) {
+      // Some browsers/privacy settings block facingMode constraint — try without it
+      console.warn('First getUserMedia attempt failed, retrying with simpler constraints', firstErr);
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false,
+      });
+    }
     if (session !== state.session) {
       stream.getTracks().forEach((track) => track.stop());
       return;
