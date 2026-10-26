@@ -62,22 +62,23 @@
         <div class="guide-box">
           <h2>Gesture Map</h2>
           <ul>
-            <li><strong>Left hand:</strong> chord / scale degree</li>
-            <li><strong>Right hand:</strong> voicing / expression</li>
-            <li><strong>Thumb:</strong> octave shift</li>
-            <li><strong>Wrist height:</strong> volume</li>
-            <li><strong>Wrist tilt:</strong> filter sweep</li>
+            <li><strong>Left fingers:</strong> chord degree (I–VII)</li>
+            <li><strong>Left tilt:</strong> major / minor</li>
+            <li><strong>Right fingers:</strong> voicing</li>
+            <li><strong>Right thumb:</strong> octave up</li>
+            <li><strong>Right wrist height:</strong> volume</li>
+            <li><strong>Right wrist tilt:</strong> filter sweep</li>
           </ul>
         </div>
 
-        <button id="startButton" class="start-button">Start camera</button>
+        <button id="startButton" class="start-button" type="button">Start camera</button>
       </aside>
 
       <main class="panel panel--right">
         <div class="camera-wrap">
           <video id="video" autoplay playsinline muted></video>
           <canvas id="overlay"></canvas>
-          <div class="status-badge" id="statusBadge">Awaiting camera</div>
+          <div class="status-badge" id="statusBadge" role="status" aria-live="polite">Ready</div>
         </div>
       </main>
     </div>
