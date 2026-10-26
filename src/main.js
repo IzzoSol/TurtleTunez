@@ -72,21 +72,10 @@ function getChordNotes(rootMidi, mode, voicingQuality) {
   const fifth = root + 7;
   const seventh = mode === 'major' ? root + 11 : root + 10;
 
-  if (voicingQuality === 1) {
-    return [root, fifth, root + 12, third];
-  }
-
-  if (voicingQuality === 2) {
-    return [third, root + 12, fifth, root + 7];
-  }
-
-  if (voicingQuality === 3) {
-    return [root, third, fifth, seventh, root + 12];
-  }
-
-  if (voicingQuality === 4) {
-    return [root, third, fifth, seventh, root + 12, root + 17];
-  }
+  if (voicingQuality === 1) return [root, fifth, root + 12, third];
+  if (voicingQuality === 2) return [third, root + 12, fifth, root + 7];
+  if (voicingQuality === 3) return [root, third, fifth, seventh, root + 12];
+  if (voicingQuality === 4) return [root, third, fifth, seventh, root + 12, root + 17];
 
   return [root, third, fifth, root + 12];
 }
@@ -117,9 +106,7 @@ function stopActiveOscillators() {
 }
 
 function renderSynth() {
-  if (!state.audioContext || !state.masterGain) {
-    return;
-  }
+  if (!state.audioContext || !state.masterGain) return;
 
   stopActiveOscillators();
 
@@ -275,9 +262,7 @@ function drawLandmarks(result) {
 }
 
 function detectHands() {
-  if (!state.handLandmarker || !video.videoWidth) {
-    return;
-  }
+  if (!state.handLandmarker || !video.videoWidth) return;
 
   const result = state.handLandmarker.detectForVideo(video, performance.now());
   drawLandmarks(result);
@@ -331,18 +316,11 @@ function initKeySelect() {
 
 async function initCamera() {
   ensureAudio();
-
-  if (state.streamStarted) {
-    return;
-  }
+  if (state.streamStarted) return;
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        width: 640,
-        height: 480,
-        facingMode: 'user',
-      },
+      video: { width: 640, height: 480, facingMode: 'user' },
       audio: false,
     });
 

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TurtleTunez</title>
+    <meta
+      name="description"
+      content="TurtleTunez is a browser-based gesture-controlled music instrument built with MediaPipe and Web Audio."
+    />
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="panel panel--left">
+        <div class="brand-row">
+          <div class="brand-mark">T</div>
+          <div>
+            <p class="eyebrow">Gesture Synth</p>
+            <h1>TurtleTunez</h1>
+          </div>
+        </div>
+
+        <div class="controls">
+          <label>
+            Key
+            <select id="keySelect"></select>
+          </label>
+
+          <label>
+            Waveform
+            <select id="waveformSelect">
+              <option value="triangle">Triangle</option>
+              <option value="sawtooth">Sawtooth</option>
+              <option value="square">Square</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="stats">
+          <div class="stat-card">
+            <span class="label">Chord</span>
+            <strong id="chordValue">I</strong>
+          </div>
+
+          <div class="stat-card">
+            <span class="label">Quality</span>
+            <strong id="qualityValue">Major</strong>
+          </div>
+
+          <div class="stat-card">
+            <span class="label">Volume</span>
+            <strong id="volumeValue">0%</strong>
+          </div>
+
+          <div class="stat-card">
+            <span class="label">Filter</span>
+            <strong id="filterValue">0%</strong>
+          </div>
+        </div>
+
+        <div class="guide-box">
+          <h2>Gesture Map</h2>
+          <ul>
+            <li><strong>Left hand:</strong> chord / scale degree</li>
+            <li><strong>Right hand:</strong> voicing / expression</li>
+            <li><strong>Thumb:</strong> octave shift</li>
+            <li><strong>Wrist height:</strong> volume</li>
+            <li><strong>Wrist tilt:</strong> filter sweep</li>
+          </ul>
+        </div>
+
+        <button id="startButton" class="start-button">Start camera</button>
+      </aside>
+
+      <main class="panel panel--right">
+        <div class="camera-wrap">
+          <video id="video" autoplay playsinline muted></video>
+          <canvas id="overlay"></canvas>
+          <div class="status-badge" id="statusBadge">Awaiting camera</div>
+        </div>
+      </main>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
