@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TurtleTunez</title>
+    <title>TurtleTunez — Gesture Studio</title>
     <meta
       name="description"
       content="TurtleTunez is a browser-based gesture-controlled music instrument built with MediaPipe and Web Audio."
@@ -11,126 +11,189 @@
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
-    <div class="app-shell">
-      <aside class="panel panel--left">
-        <div class="brand-row">
-          <div class="brand-mark">T</div>
-          <div>
-            <p class="eyebrow">Gesture Studio</p>
-            <h1>TurtleTunez</h1>
+    <div class="app">
+      <!-- ======= Top bar ======= -->
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark">T</span>
+          <div class="brand-text">
+            <strong>TurtleTunez</strong>
+            <span>Gesture Studio</span>
           </div>
         </div>
 
-        <div class="mode-row" role="group" aria-label="Play mode">
+        <nav class="mode-segment" role="tablist" aria-label="Play mode">
           <button type="button" class="mode-chip is-active" data-mode="solo">Solo</button>
           <button type="button" class="mode-chip" data-mode="duo">Duo</button>
+          <button type="button" class="mode-chip" data-mode="band">Band</button>
+          <button type="button" class="mode-chip" data-mode="beats">Beats</button>
+          <button type="button" class="mode-chip" data-mode="cymatics">Cymatics</button>
+        </nav>
+
+        <div class="topbar-right">
+          <div class="bpm-pill" title="Tempo">
+            <span class="bpm-dot"></span>
+            <input id="bpmInput" type="number" min="50" max="200" step="1" value="100" aria-label="BPM" />
+            <em>BPM</em>
+          </div>
+          <button id="startButton" class="start-button" type="button">Start camera</button>
         </div>
+      </header>
 
-        <div class="controls">
-          <label>
-            Key
-            <select id="keySelect"></select>
-          </label>
-
-          <label>
-            Waveform
-            <select id="waveformSelect">
-              <option value="triangle">Triangle</option>
-              <option value="sawtooth">Sawtooth</option>
-              <option value="square">Square</option>
-              <option value="sine">Sine</option>
-            </select>
-          </label>
-
-          <label>
-            Beat pattern
-            <select id="drumPatternSelect">
-              <option value="trap">Trap</option>
-              <option value="house">House</option>
-              <option value="hiphop">Hip-Hop</option>
-              <option value="lofi">Lo-Fi</option>
-              <option value="techno">Techno</option>
-            </select>
-          </label>
-
-          <div class="bpm-row">
-            <label for="bpmInput">BPM</label>
-            <input id="bpmInput" type="number" min="50" max="200" step="1" value="100" />
-          </div>
-        </div>
-
-        <section class="seq-box" aria-label="Step sequencer">
-          <h2>Steps</h2>
-          <div class="seq-grid" id="seqGrid"></div>
-        </section>
-
-        <section class="agents-box" aria-label="Backing agents">
-          <h2>Agent band</h2>
-          <div class="agent-row">
-            <button type="button" class="agent-chip" data-agent="drums">🥁 Drums</button>
-            <button type="button" class="agent-chip" data-agent="bass">🎸 Bass</button>
-            <button type="button" class="agent-chip" data-agent="arp">✨ Arp</button>
-            <button type="button" class="agent-chip" data-agent="pad">☁️ Pad</button>
-          </div>
-        </section>
-
-        <div class="stats">
-          <div class="stat-card">
-            <span class="label">Chord</span>
-            <strong id="chordValue">I</strong>
+      <!-- ======= Studio stage ======= -->
+      <div class="studio">
+        <main class="stage" id="stage" data-mode="solo">
+          <!-- Camera (full stage, or PiP in Cymatics mode) -->
+          <div class="camera-wrap" id="cameraWrap">
+            <video id="video" autoplay playsinline muted></video>
+            <canvas id="overlay"></canvas>
+            <div class="camera-idle" id="cameraIdle">
+              <div class="camera-idle-icon">▶</div>
+              <p>Start the camera to play with your hands</p>
+            </div>
           </div>
 
-          <div class="stat-card">
-            <span class="label">Quality</span>
-            <strong id="qualityValue">Major</strong>
+          <!-- Cymatics visualizer stage (visible in Cymatics mode) -->
+          <div class="viz-stage" id="vizStage" hidden>
+            <canvas id="vizCanvas"></canvas>
+            <div class="viz-hint" id="vizHint">Cymatics reacts to everything you play</div>
           </div>
 
-          <div class="stat-card">
-            <span class="label">Volume</span>
-            <strong id="volumeValue">0%</strong>
-          </div>
-
-          <div class="stat-card">
-            <span class="label">Filter</span>
-            <strong id="filterValue">0%</strong>
-          </div>
-        </div>
-
-        <div class="guide-box">
-          <h2>Gesture Map</h2>
-          <ul>
-            <li><strong>Left fingers:</strong> chord degree (I–VII)</li>
-            <li><strong>Left tilt:</strong> major / minor</li>
-            <li><strong>Right fingers:</strong> voicing</li>
-            <li><strong>Right thumb:</strong> octave up</li>
-            <li><strong>Right wrist height:</strong> volume</li>
-            <li><strong>Right wrist tilt:</strong> filter sweep</li>
-          </ul>
-          <p class="duo-hint" id="duoHint" hidden>
-            Duo mode: player 2’s left hand picks the beat pattern, right hand rolls the drums.
-          </p>
-        </div>
-
-        <button id="startButton" class="start-button" type="button">Start camera</button>
-        <p class="camera-help" style="font-size:12px;color:#888;margin-top:8px;">
-          If camera is blocked: check browser settings (chrome://settings/content/camera) and Windows Settings > Privacy > Camera. Make sure your browser is allowed.
-        </p>
-      </aside>
-
-      <main class="panel panel--center">
-        <div class="viz-wrap">
-          <canvas id="vizCanvas"></canvas>
-          <div class="viz-label">Cymatics</div>
-        </div>
-      </main>
-
-      <section class="panel panel--right">
-        <div class="camera-wrap">
-          <video id="video" autoplay playsinline muted></video>
-          <canvas id="overlay"></canvas>
           <div class="status-badge" id="statusBadge" role="status" aria-live="polite">Ready</div>
-        </div>
-      </section>
+        </main>
+
+        <!-- ======= Retractable drawer rail ======= -->
+        <nav class="drawer-rail" aria-label="Studio panels">
+          <button type="button" class="rail-btn" data-tab="sound" title="Sound">🎛<small>Sound</small></button>
+          <button type="button" class="rail-btn" data-tab="beats" title="Beats">🥁<small>Beats</small></button>
+          <button type="button" class="rail-btn" data-tab="agents" title="Agents">🤖<small>Agents</small></button>
+          <button type="button" class="rail-btn" data-tab="guide" title="Guide">❓<small>Guide</small></button>
+        </nav>
+
+        <!-- ======= Drawer panels ======= -->
+        <aside class="drawer" id="drawer" aria-hidden="true">
+          <div class="drawer-head">
+            <strong id="drawerTitle">Sound</strong>
+            <button type="button" class="drawer-close" id="drawerClose" aria-label="Close panel">✕</button>
+          </div>
+
+          <!-- Sound panel -->
+          <section class="drawer-panel" data-panel="sound">
+            <div class="stats">
+              <div class="stat-card">
+                <span class="label">Chord</span>
+                <strong id="chordValue">I</strong>
+              </div>
+              <div class="stat-card">
+                <span class="label">Quality</span>
+                <strong id="qualityValue">Major</strong>
+              </div>
+              <div class="stat-card">
+                <span class="label">Volume</span>
+                <strong id="volumeValue">0%</strong>
+              </div>
+              <div class="stat-card">
+                <span class="label">Filter</span>
+                <strong id="filterValue">0%</strong>
+              </div>
+            </div>
+
+            <label class="field">
+              Key
+              <select id="keySelect"></select>
+            </label>
+
+            <label class="field">
+              Waveform
+              <select id="waveformSelect">
+                <option value="triangle">Triangle</option>
+                <option value="sawtooth">Sawtooth</option>
+                <option value="square">Square</option>
+                <option value="sine">Sine</option>
+              </select>
+            </label>
+          </section>
+
+          <!-- Beats panel -->
+          <section class="drawer-panel" data-panel="beats" hidden>
+            <label class="field">
+              Beat pattern
+              <select id="drumPatternSelect">
+                <option value="trap">Trap</option>
+                <option value="house">House</option>
+                <option value="hiphop">Hip-Hop</option>
+                <option value="lofi">Lo-Fi</option>
+                <option value="techno">Techno</option>
+              </select>
+            </label>
+
+            <div class="seq-box">
+              <h3>Step sequencer</h3>
+              <div class="seq-grid" id="seqGrid"></div>
+              <p class="seq-legend">
+                <span class="dot dot-kick"></span>Kick
+                <span class="dot dot-snare"></span>Snare
+                <span class="dot dot-hat"></span>Hat
+                <span class="dot dot-clap"></span>Clap
+              </p>
+            </div>
+          </section>
+
+          <!-- Agents panel -->
+          <section class="drawer-panel" data-panel="agents" hidden>
+            <p class="panel-note">Backing agents follow your chords and tempo.</p>
+            <div class="agent-list">
+              <button type="button" class="agent-chip" data-agent="drums">
+                <span class="agent-emoji">🥁</span>
+                <span><strong>Drums</strong><em>Beat pattern groove</em></span>
+              </button>
+              <button type="button" class="agent-chip" data-agent="bass">
+                <span class="agent-emoji">🎸</span>
+                <span><strong>Bass</strong><em>Root-note eighth pulse</em></span>
+              </button>
+              <button type="button" class="agent-chip" data-agent="arp">
+                <span class="agent-emoji">✨</span>
+                <span><strong>Arp</strong><em>Chord arpeggio shimmer</em></span>
+              </button>
+              <button type="button" class="agent-chip" data-agent="pad">
+                <span class="agent-emoji">☁️</span>
+                <span><strong>Pad</strong><em>Slow chord swell</em></span>
+              </button>
+            </div>
+            <p class="panel-note">Band mode turns everyone on. Beats mode frees the drums without the camera.</p>
+          </section>
+
+          <!-- Guide panel -->
+          <section class="drawer-panel" data-panel="guide" hidden>
+            <div class="guide-box">
+              <h3>Gesture map</h3>
+              <ul>
+                <li><strong>Left fingers</strong> chord degree (I–VII)</li>
+                <li><strong>Left tilt</strong> major / minor</li>
+                <li><strong>Right fingers</strong> voicing</li>
+                <li><strong>Right thumb</strong> octave up</li>
+                <li><strong>Right wrist height</strong> volume</li>
+                <li><strong>Right wrist tilt</strong> filter sweep</li>
+              </ul>
+            </div>
+
+            <div class="guide-box">
+              <h3>Modes</h3>
+              <ul>
+                <li><strong>Solo</strong> one player, two hands</li>
+                <li><strong>Duo</strong> two players — P2’s left picks the beat, right rolls drums</li>
+                <li><strong>Band</strong> all agents join you</li>
+                <li><strong>Beats</strong> drum machine focus — camera optional</li>
+                <li><strong>Cymatics</strong> visualizer takes the stage, camera docks as PiP</li>
+              </ul>
+            </div>
+
+            <p class="panel-note">
+              Camera blocked? Check chrome://settings/content/camera and Windows Settings → Privacy → Camera.
+            </p>
+          </section>
+        </aside>
+      </div>
     </div>
 
     <script type="module" src="/src/main.js"></script>

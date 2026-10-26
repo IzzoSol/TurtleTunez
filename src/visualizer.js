@@ -6,8 +6,8 @@ export class CymaticsVisualizer {
     this.canvas = canvas;
     this.ctx2d = canvas.getContext('2d');
     this.analyser = analyser;
-    this.rings = opts.rings ?? 28;
-    this.spokes = opts.spokes ?? 96;
+    this.rings = opts.rings ?? 22;
+    this.spokes = opts.spokes ?? 64;
     this.baseRadius = opts.baseRadius ?? 0.18;
     this.hue = opts.hue ?? 199;
     this.running = false;
@@ -116,8 +116,12 @@ export class CymaticsVisualizer {
       ctx2d.closePath();
       ctx2d.strokeStyle = `hsla(${hue}, 85%, ${52 + level * 22}%, ${alpha})`;
       ctx2d.lineWidth = 1 + level * 1.6;
-      ctx2d.shadowBlur = 8 + level * 18;
-      ctx2d.shadowColor = `hsla(${hue}, 90%, 60%, ${alpha})`;
+      if (i % 3 === 0) {
+        ctx2d.shadowBlur = 8 + level * 16;
+        ctx2d.shadowColor = `hsla(${hue}, 90%, 60%, ${alpha})`;
+      } else {
+        ctx2d.shadowBlur = 0;
+      }
       ctx2d.stroke();
     }
 
