@@ -1509,6 +1509,10 @@ body.layout-bottom .drawer.is-open {
 
 /* ============================ Onboarding overlay ============================ */
 
+.onboard-backdrop[hidden] {
+  display: none !important;
+}
+
 .onboard-backdrop {
   position: fixed;
   inset: 0;

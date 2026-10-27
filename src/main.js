@@ -1773,6 +1773,7 @@ function initControls() {
   }
   function closeOnboard() {
     onboardBackdrop.hidden = true;
+    onboardBackdrop.style.display = 'none';
     localStorage.setItem('turtleTunez.onboarded', '1');
   }
   onboardNext.addEventListener('click', () => {
