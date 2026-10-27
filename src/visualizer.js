@@ -16,7 +16,19 @@ export class CymaticsVisualizer {
     this._time = 0;
     this._resize = this._resize.bind(this);
     window.addEventListener('resize', this._resize);
+    // Re-measure whenever the canvas actually becomes visible / resizes
+    // (fixes the 0x0 -> stretched -> white-screen bug in Cymatics mode).
+    if (window.ResizeObserver) {
+      this._ro = new ResizeObserver(() => this._resize());
+      this._ro.observe(this.canvas);
+    }
     this._resize();
+  }
+
+  dispose() {
+    this.stop();
+    window.removeEventListener('resize', this._resize);
+    this._ro?.disconnect();
   }
 
   setHue(h) {
@@ -35,6 +47,7 @@ export class CymaticsVisualizer {
 
   start() {
     if (this.running) return;
+    this._resize(); // canvas may have been hidden (0x0) when constructed
     this.running = true;
     if (this.analyser && !this._data) {
       this._data = new Uint8Array(this.analyser.frequencyBinCount);
@@ -51,11 +64,6 @@ export class CymaticsVisualizer {
     this.running = false;
     if (this._raf) cancelAnimationFrame(this._raf);
     this._raf = null;
-  }
-
-  dispose() {
-    this.stop();
-    window.removeEventListener('resize', this._resize);
   }
 
   _draw() {

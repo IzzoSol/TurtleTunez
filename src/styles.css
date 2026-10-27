@@ -216,6 +216,36 @@ input:focus-visible {
   color: var(--muted-2);
 }
 
+.record-button {
+  border: 1px solid rgba(248, 113, 113, 0.5);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-weight: 800;
+  font-size: 0.78rem;
+  background: rgba(248, 113, 113, 0.12);
+  color: #fca5a5;
+  transition: all 150ms var(--ease);
+  white-space: nowrap;
+}
+
+.record-button:hover {
+  background: rgba(248, 113, 113, 0.22);
+  transform: translateY(-1px);
+}
+
+.record-button.is-recording {
+  background: linear-gradient(135deg, #ef4444, #f97316);
+  border-color: transparent;
+  color: #fff;
+  animation: recPulse 1.2s infinite;
+}
+
+@keyframes recPulse {
+  50% {
+    box-shadow: 0 0 18px rgba(239, 68, 68, 0.6);
+  }
+}
+
 .start-button {
   border: 0;
   border-radius: 999px;
@@ -590,6 +620,36 @@ input:focus-visible {
   border-color: var(--border-strong);
 }
 
+.beat-row {
+  display: flex;
+  gap: 12px;
+  align-items: end;
+}
+
+.beat-row .field {
+  flex: 1;
+}
+
+.toggle-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+  cursor: pointer;
+  padding-bottom: 10px;
+}
+
+.toggle-field input {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
 /* Sequencer */
 .seq-box h3,
 .guide-box h3 {
@@ -673,6 +733,50 @@ input:focus-visible {
 .dot-clap { background: #8b5cf6; }
 
 /* Agents */
+.intensity-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.intensity-label {
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+
+.intensity-segment {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: rgba(15, 21, 38, 0.85);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.intensity-segment button {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 6px 0;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  transition: all 150ms var(--ease);
+}
+
+.intensity-segment button:hover {
+  color: var(--text);
+}
+
+.intensity-segment button.is-active {
+  background: linear-gradient(135deg, rgba(125, 211, 252, 0.85), rgba(167, 139, 250, 0.85));
+  color: #071522;
+}
+
 .agent-list {
   display: flex;
   flex-direction: column;
@@ -752,6 +856,64 @@ input:focus-visible {
   font-size: 0.72rem;
   line-height: 1.5;
   color: var(--muted-2);
+}
+
+/* ============================ Euclid & extras ============================ */
+
+.euclid-box {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+}
+
+.euclid-box h3 {
+  margin: 0 0 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+
+.euclid-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.euclid-grid input[type='range'],
+.field input[type='range'] {
+  accent-color: var(--accent);
+  width: 100%;
+  margin-top: 6px;
+  cursor: pointer;
+}
+
+.apply-button {
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, rgba(125, 211, 252, 0.16), rgba(167, 139, 250, 0.16));
+  color: var(--accent);
+  padding: 10px 14px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  transition: all 150ms var(--ease);
+}
+
+.apply-button:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.15);
+}
+
+.field-value {
+  float: right;
+  color: var(--accent);
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 /* ============================ Responsive ============================ */

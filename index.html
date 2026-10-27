@@ -36,6 +36,7 @@
             <input id="bpmInput" type="number" min="50" max="200" step="1" value="100" aria-label="BPM" />
             <em>BPM</em>
           </div>
+          <button id="recordButton" class="record-button" type="button" title="Record the mix">● Rec</button>
           <button id="startButton" class="start-button" type="button">Start camera</button>
         </div>
       </header>
@@ -104,28 +105,139 @@
             </label>
 
             <label class="field">
-              Waveform
-              <select id="waveformSelect">
-                <option value="triangle">Triangle</option>
-                <option value="sawtooth">Sawtooth</option>
-                <option value="square">Square</option>
-                <option value="sine">Sine</option>
+              Character
+              <select id="presetSelect">
+                <optgroup label="Pads">
+                  <option value="softPad">Soft Pad</option>
+                  <option value="warmPad">Warm Pad</option>
+                  <option value="darkPad">Dark Pad</option>
+                  <option value="ethereal">Ethereal Pad</option>
+                </optgroup>
+                <optgroup label="Leads">
+                  <option value="brightLead">Bright Lead</option>
+                  <option value="analogLead">Analog Lead</option>
+                  <option value="acidLead">Acid Lead</option>
+                  <option value="softLead">Soft Lead</option>
+                </optgroup>
+                <optgroup label="Bass">
+                  <option value="subBass">Sub Bass</option>
+                  <option value="reeseBass">Reese Bass</option>
+                  <option value="bass808">808 Bass</option>
+                </optgroup>
+                <optgroup label="Keys & Plucks">
+                  <option value="rhodes">Rhodes Keys</option>
+                  <option value="organ">Organ</option>
+                  <option value="glassKeys">Glass Keys</option>
+                  <option value="synthPluck">Synth Pluck</option>
+                </optgroup>
+                <optgroup label="Bells">
+                  <option value="fmBell">FM Bell</option>
+                  <option value="vibraphone">Vibraphone</option>
+                </optgroup>
               </select>
             </label>
-          </section>
+            <label class="field">
+              Tuning
+              <select id="tuningSelect">
+                <option value="equal">Equal Temperament (12-TET)</option>
+                <option value="just">Just Intonation</option>
+                <option value="pythagorean">Pythagorean</option>
+                <option value="meantone">Quarter-Comma Mean-tone</option>
+              </select>
+            </label>
 
-          <!-- Beats panel -->
+            <label class="field">
+              Reverb <span id="reverbValue" class="field-value">25%</span>
+              <input id="reverbSlider" type="range" min="0" max="100" step="1" value="25" />
+            </label>
+          </section>
           <section class="drawer-panel" data-panel="beats" hidden>
             <label class="field">
               Beat pattern
               <select id="drumPatternSelect">
-                <option value="trap">Trap</option>
-                <option value="house">House</option>
-                <option value="hiphop">Hip-Hop</option>
-                <option value="lofi">Lo-Fi</option>
-                <option value="techno">Techno</option>
+                <optgroup label="Trap">
+                  <option value="trap">Trap Basic</option>
+                  <option value="trapRoll">Trap Roll</option>
+                  <option value="trapHeavy">Trap Heavy</option>
+                </optgroup>
+                <optgroup label="House">
+                  <option value="house">House Four on Floor</option>
+                  <option value="houseDeep">House Deep</option>
+                  <option value="houseTech">House Tech</option>
+                  <option value="disco">Disco</option>
+                </optgroup>
+                <optgroup label="Hip-Hop">
+                  <option value="hiphop">Hip-Hop Boom Bap</option>
+                  <option value="hiphopClassic">Hip-Hop Classic</option>
+                  <option value="rnb">R&B Pocket</option>
+                </optgroup>
+                <optgroup label="Lo-Fi">
+                  <option value="lofi">Lo-Fi Dusty</option>
+                  <option value="lofiJazz">Lo-Fi Jazz</option>
+                </optgroup>
+                <optgroup label="Techno">
+                  <option value="techno">Techno Driving</option>
+                  <option value="technoIndustrial">Techno Industrial</option>
+                </optgroup>
+                <optgroup label="Bass">
+                  <option value="dnb">DnB Break</option>
+                  <option value="dnbRoll">DnB Roll</option>
+                  <option value="dubstep">Dubstep Wobble</option>
+                  <option value="garage">UK Garage</option>
+                </optgroup>
+                <optgroup label="World">
+                  <option value="afrobeat">Afrobeat</option>
+                  <option value="latin">Latin Son Clave</option>
+                  <option value="reggae">Reggae One Drop</option>
+                </optgroup>
+                <optgroup label="Band">
+                  <option value="rock">Rock Backbeat</option>
+                  <option value="pop">Pop Radio</option>
+                  <option value="funk">Funk Syncopated</option>
+                  <option value="jazz">Jazz Swing</option>
+                  <option value="bossa">Bossa Nova</option>
+                  <option value="blues">Blues Shuffle</option>
+                  <option value="ballad">Ballad Simple</option>
+                  <option value="ambient">Ambient Sparse</option>
+                </optgroup>
               </select>
             </label>
+
+            <div class="beat-row">
+              <label class="field">
+                Groove
+                <select id="grooveSelect">
+                  <option value="0">Straight</option>
+                  <option value="0.06">Bounce</option>
+                  <option value="0.09">Hip-Hop Pocket</option>
+                  <option value="0.12">Shuffle</option>
+                  <option value="0.15">Jazzy</option>
+                </select>
+              </label>
+              <label class="toggle-field">
+                <input type="checkbox" id="fillsToggle" checked />
+                <span>Bar fills</span>
+              </label>
+            </div>
+
+            <div class="euclid-box">
+              <h3>Euclid generator</h3>
+              <div class="euclid-grid">
+                <label class="field">Kick pulses
+                  <input id="euclidKick" type="range" min="0" max="16" step="1" value="4" />
+                </label>
+                <label class="field">Snare pulses
+                  <input id="euclidSnare" type="range" min="0" max="16" step="1" value="2" />
+                </label>
+                <label class="field">Hat pulses
+                  <input id="euclidHat" type="range" min="0" max="16" step="1" value="8" />
+                </label>
+                <label class="field">Rotation
+                  <input id="euclidRotate" type="range" min="0" max="15" step="1" value="0" />
+                </label>
+              </div>
+              <button type="button" id="euclidApply" class="apply-button">Apply Euclid pattern</button>
+            </div>
 
             <div class="seq-box">
               <h3>Step sequencer</h3>
@@ -142,6 +254,14 @@
           <!-- Agents panel -->
           <section class="drawer-panel" data-panel="agents" hidden>
             <p class="panel-note">Backing agents follow your chords and tempo.</p>
+            <div class="intensity-box">
+              <span class="intensity-label">Band intensity</span>
+              <div class="intensity-segment" role="group" aria-label="Band intensity">
+                <button type="button" data-intensity="1">Calm</button>
+                <button type="button" data-intensity="2" class="is-active">Groove</button>
+                <button type="button" data-intensity="3">Busy</button>
+              </div>
+            </div>
             <div class="agent-list">
               <button type="button" class="agent-chip" data-agent="drums">
                 <span class="agent-emoji">🥁</span>
@@ -154,6 +274,10 @@
               <button type="button" class="agent-chip" data-agent="arp">
                 <span class="agent-emoji">✨</span>
                 <span><strong>Arp</strong><em>Chord arpeggio shimmer</em></span>
+              </button>
+              <button type="button" class="agent-chip" data-agent="strings">
+                <span class="agent-emoji">🎻</span>
+                <span><strong>Strings</strong><em>Karplus-Strong plucked chords</em></span>
               </button>
               <button type="button" class="agent-chip" data-agent="pad">
                 <span class="agent-emoji">☁️</span>
@@ -182,9 +306,19 @@
               <ul>
                 <li><strong>Solo</strong> one player, two hands</li>
                 <li><strong>Duo</strong> two players — P2’s left picks the beat, right rolls drums</li>
-                <li><strong>Band</strong> all agents join you</li>
+                <li><strong>Band</strong> all agents join you (drums, bass, arp, pad, strings)</li>
                 <li><strong>Beats</strong> drum machine focus — camera optional</li>
                 <li><strong>Cymatics</strong> visualizer takes the stage, camera docks as PiP</li>
+              </ul>
+            </div>
+
+            <div class="guide-box">
+              <h3>Keyboard</h3>
+              <ul>
+                <li><strong>1–7</strong> chord degrees (I–VII)</li>
+                <li><strong>Space</strong> drums on / off</li>
+                <li><strong>Z X C V</strong> kick · snare · hat · clap</li>
+                <li><strong>Esc</strong> close the drawer</li>
               </ul>
             </div>
 

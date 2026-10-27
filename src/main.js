@@ -1,8 +1,12 @@
 import './styles.css';
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 import { DrumMachine } from './drum-machine.js';
-import { BassAgent, ArpAgent, PadAgent } from './band-agents.js';
+import { BassAgent, ArpAgent, PadAgent, StringsAgent } from './band-agents.js';
 import { CymaticsVisualizer } from './visualizer.js';
+import { SYNTH_PRESETS } from './synth-presets.js';
+import { StudioRecorder } from './recorder.js';
+import { Reverb, pluck } from './effects.js';
+import { euclidDrumPattern } from './euclid.js';
 
 const WASM_BASE = '/wasm';
 const MODEL_URL = '/hand_landmarker.task';
@@ -37,10 +41,21 @@ const video = $('video');
 const canvas = $('overlay');
 const ctx2d = canvas.getContext('2d');
 const startButton = $('startButton');
+const recordButton = $('recordButton');
 const keySelect = $('keySelect');
-const waveformSelect = $('waveformSelect');
+const presetSelect = $('presetSelect');
 const statusBadge = $('statusBadge');
 const drumPatternSelect = $('drumPatternSelect');
+const grooveSelect = $('grooveSelect');
+const fillsToggle = $('fillsToggle');
+const tuningSelect = $('tuningSelect');
+const reverbSlider = $('reverbSlider');
+const reverbValue = $('reverbValue');
+const euclidKick = $('euclidKick');
+const euclidSnare = $('euclidSnare');
+const euclidHat = $('euclidHat');
+const euclidRotate = $('euclidRotate');
+const euclidApply = $('euclidApply');
 const bpmInput = $('bpmInput');
 const seqGrid = $('seqGrid');
 const vizCanvas = $('vizCanvas');
@@ -54,6 +69,7 @@ const drawerClose = $('drawerClose');
 const modeChips = Array.from(document.querySelectorAll('.mode-chip'));
 const railBtns = Array.from(document.querySelectorAll('.rail-btn'));
 const agentChips = Array.from(document.querySelectorAll('.agent-chip'));
+const intensityBtns = Array.from(document.querySelectorAll('.intensity-segment button'));
 
 const readouts = {
   chord: $('chordValue'),
@@ -71,7 +87,9 @@ const state = {
   rafId: null,
   lastVideoTime: -1,
   key: 'C',
-  waveform: waveformSelect.value,
+  preset: 'softPad',
+  tuning: 'equal',
+  reverbWet: 0.25,
   audio: null,
   left: { candidateKey: null, count: 0, value: null },
   right: { candidateKey: null, count: 0, value: null },
@@ -83,7 +101,8 @@ const state = {
   readoutText: {},
   bpm: 100,
   mode: 'solo',
-  agentFlags: { drums: false, bass: false, arp: false, pad: false },
+  agentFlags: { drums: false, bass: false, arp: false, pad: false, strings: false },
+  agentIntensity: 2,
   seqCustom: null,
   chordNotes: [48, 52, 55],
   playheadStep: -1,
@@ -91,8 +110,25 @@ const state = {
   activeTab: null,
 };
 
+// Tuning tables (TuneJS-style) — cent offsets per semitone from the root.
+const TUNINGS = {
+  equal: { name: 'Equal (12-TET)', cents: [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100] },
+  just: { name: 'Just Intonation', cents: [0, 111.7, 203.9, 315.6, 386.3, 498.0, 702.0, 813.7, 884.4, 1017.6, 1088.3, 1200] },
+  pythagorean: { name: 'Pythagorean', cents: [0, 113.7, 203.9, 317.6, 407.8, 498.0, 611.7, 702.0, 815.6, 905.9, 1019.6, 1109.8] },
+  meantone: { name: 'Quarter-Comma Mean-tone', cents: [0, 76.0, 193.2, 310.3, 386.3, 503.4, 579.5, 696.6, 772.6, 889.7, 1006.8, 1082.9] },
+};
+
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
-const midiToFrequency = (midi) => 440 * Math.pow(2, (midi - 69) / 12);
+
+// Tuning-aware note frequency. Falls back to 12-TET.
+function midiToFrequency(midi) {
+  const table = TUNINGS[state.tuning] ?? TUNINGS.equal;
+  const octave = Math.floor(midi / 12);
+  const semitone = ((midi % 12) + 12) % 12;
+  const cents = table.cents[semitone] ?? semitone * 100;
+  return 440 * Math.pow(2, (midi - 69) / 12 + cents / 1200 - semitone / 12);
+}
+
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
 /* ---------- Status & readouts ---------- */
@@ -246,14 +282,18 @@ function ensureAudio() {
   // Gesture chord bus — its level is played by your right hand.
   const master = ctx.createGain();
   master.gain.value = 0;
-  master.connect(analyser);
 
   // Studio bus — drums and agents live here so they stay audible
   // even when the gesture volume is down (e.g. Beats mode, no camera).
   const studioBus = ctx.createGain();
   studioBus.gain.value = 0.9;
-  studioBus.connect(analyser);
 
+  // Studio reverb (reverbGen-style convolution) on the whole mix.
+  const reverb = new Reverb(ctx, analyser, { wet: state.reverbWet });
+  reverb.connectFrom(master);
+  reverb.connectFrom(studioBus);
+
+  // Gesture filter — its cutoff is played by your right-hand tilt.
   const filter = ctx.createBiquadFilter();
   filter.type = 'lowpass';
   filter.frequency.value = state.filterHz;
@@ -261,27 +301,52 @@ function ensureAudio() {
   filter.connect(master);
 
   const voices = Array.from({ length: VOICE_COUNT }, () => {
+    const preset = SYNTH_PRESETS[state.preset] ?? SYNTH_PRESETS.softPad;
+    // Main oscillator + detuned sub oscillator -> character filter -> gesture filter.
     const osc = ctx.createOscillator();
+    const sub = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.type = state.waveform;
+    const subGain = ctx.createGain();
+    const charFilter = ctx.createBiquadFilter();
+
+    osc.type = preset.wave;
+    sub.type = preset.subWave;
+    osc.detune.value = preset.detune;
+    sub.detune.value = -preset.detune;
+    subGain.gain.value = preset.sub;
+
+    charFilter.type = 'lowpass';
+    charFilter.frequency.value = preset.char;
+    charFilter.Q.value = 0.6;
+
     gain.gain.value = 0;
     osc.connect(gain);
-    gain.connect(filter);
+    sub.connect(subGain);
+    gain.connect(charFilter);
+    subGain.connect(charFilter);
+    charFilter.connect(filter);
+
     osc.start();
-    return { osc, gain };
+    sub.start();
+    return { osc, sub, gain, subGain, charFilter };
   });
 
   const drums = new DrumMachine(ctx, studioBus);
   drums.setBpm(state.bpm);
   drums.onStep((step) => setPlayhead(step));
 
+  const recorder = new StudioRecorder(ctx, [master, studioBus]);
+
   const agents = {
     bass: new BassAgent(ctx, studioBus),
     arp: new ArpAgent(ctx, studioBus),
     pad: new PadAgent(ctx, studioBus),
+    strings: new StringsAgent(ctx, studioBus),
   };
+  Object.values(agents).forEach((agent) => agent.setIntensity(state.agentIntensity));
 
-  state.audio = { ctx, master, studioBus, filter, voices, analyser, drums, agents };
+  state.audio = { ctx, master, studioBus, reverb, filter, voices, analyser, drums, agents, recorder };
+  if (!recorder.supported) recordButton.disabled = true;
   ensureVisualizer(analyser);
   return true;
 }
@@ -298,7 +363,9 @@ function applyChord(notes) {
   const perVoice = 0.7 / notes.length;
   voices.forEach((voice, i) => {
     if (i < notes.length) {
-      voice.osc.frequency.setTargetAtTime(midiToFrequency(notes[i]), t, 0.04);
+      const freq = midiToFrequency(notes[i]);
+      voice.osc.frequency.setTargetAtTime(freq, t, 0.04);
+      voice.sub.frequency.setTargetAtTime(freq / 2, t, 0.04);
       voice.gain.gain.setTargetAtTime(perVoice, t, 0.05);
     } else {
       voice.gain.gain.setTargetAtTime(0, t, 0.05);
@@ -306,10 +373,19 @@ function applyChord(notes) {
   });
 }
 
-function applyWaveform(type) {
+function applyPreset(key) {
+  const preset = SYNTH_PRESETS[key];
+  if (!preset) return;
+  state.preset = key;
   if (!state.audio) return;
   state.audio.voices.forEach((voice) => {
-    voice.osc.type = type;
+    const t = state.audio.ctx.currentTime;
+    voice.osc.type = preset.wave;
+    voice.sub.type = preset.subWave;
+    voice.osc.detune.setTargetAtTime(preset.detune, t, 0.05);
+    voice.sub.detune.setTargetAtTime(-preset.detune, t, 0.05);
+    voice.subGain.gain.setTargetAtTime(preset.sub, t, 0.05);
+    voice.charFilter.frequency.setTargetAtTime(preset.char, t, 0.08);
   });
 }
 
@@ -608,7 +684,7 @@ async function startCamera() {
 
     syncStudioToState();
     if (state.agentFlags.drums) setAgentEnabled('drums', true);
-    ['bass', 'arp', 'pad'].forEach((name) => {
+    ['bass', 'arp', 'pad', 'strings'].forEach((name) => {
       if (state.agentFlags[name]) state.audio.agents[name]?.setEnabled(true);
     });
 
@@ -743,12 +819,12 @@ function applyMode(mode) {
 
   // Band mode: bring the whole backing band in.
   if (mode === 'band') {
-    ['drums', 'bass', 'arp', 'pad'].forEach((name) => setAgentEnabled(name, true));
+    ['drums', 'bass', 'arp', 'pad', 'strings'].forEach((name) => setAgentEnabled(name, true));
   }
 
   // Leaving band: clear the band so modes stay predictable.
   if (prevMode === 'band' && mode !== 'band') {
-    ['drums', 'bass', 'arp', 'pad'].forEach((name) => setAgentEnabled(name, false));
+    ['drums', 'bass', 'arp', 'pad', 'strings'].forEach((name) => setAgentEnabled(name, false));
   }
 
   // Beats mode: free the drum machine (works without camera) and focus the sequencer.
@@ -802,10 +878,18 @@ function initControls() {
     setStatus(`Key: ${state.key}`);
   });
 
-  waveformSelect.addEventListener('change', (event) => {
-    state.waveform = event.target.value;
-    applyWaveform(state.waveform);
-    setStatus(`Waveform: ${state.waveform}`);
+  // Populate character presets
+  Object.entries(SYNTH_PRESETS).forEach(([key, preset]) => {
+    const option = document.createElement('option');
+    option.value = key;
+    option.textContent = preset.name;
+    presetSelect.appendChild(option);
+  });
+  presetSelect.value = state.preset;
+
+  presetSelect.addEventListener('change', (event) => {
+    applyPreset(event.target.value);
+    setStatus(`Character: ${SYNTH_PRESETS[event.target.value]?.name ?? event.target.value}`);
   });
 
   bpmInput.addEventListener('change', () => {
@@ -823,6 +907,53 @@ function initControls() {
       if (state.agentFlags.drums) setAgentEnabled('drums', true);
     }
     setStatus(`Beat: ${DrumMachine.patterns[drumPatternSelect.value].name}`);
+  });
+
+  grooveSelect.addEventListener('change', (event) => {
+    if (state.audio) state.audio.drums.swing = Number(event.target.value) || 0;
+    setStatus(`Groove: ${event.target.selectedOptions[0]?.textContent ?? 'Straight'}`);
+  });
+
+  fillsToggle.addEventListener('change', (event) => {
+    if (state.audio) state.audio.drums.setFills(event.target.checked);
+  });
+
+  // Tuning (TuneJS-style tables) — retunes every chord voice + agent live.
+  tuningSelect.addEventListener('change', (event) => {
+    state.tuning = event.target.value;
+    state.musicSignature = ''; // force chords to rebuild with the new tuning
+    setStatus(`Tuning: ${TUNINGS[state.tuning]?.name ?? state.tuning}`);
+  });
+
+  // Reverb wet/dry on the whole mix.
+  reverbSlider.addEventListener('input', () => {
+    const wet = Number(reverbSlider.value) / 100;
+    state.reverbWet = wet;
+    reverbValue.textContent = `${reverbSlider.value}%`;
+    state.audio?.reverb.setWet(wet);
+  });
+
+  // Euclidean rhythm generator (Beet.js-style Bjorklund).
+  euclidApply.addEventListener('click', () => {
+    const pattern = euclidDrumPattern({
+      kickPulses: Number(euclidKick.value) || 0,
+      snarePulses: Number(euclidSnare.value) || 0,
+      hatPulses: Number(euclidHat.value) || 0,
+      steps: 16,
+      rotation: Number(euclidRotate.value) || 0,
+    });
+    state.seqCustom = {
+      kick: pattern.kick,
+      snare: pattern.snare,
+      hihat: pattern.hihat,
+      clap: pattern.clap,
+    };
+    buildSeqGrid();
+    if (state.audio) {
+      state.audio.drums.setCustom(state.seqCustom);
+      if (state.agentFlags.drums) setAgentEnabled('drums', true);
+    }
+    setStatus('Euclid pattern applied');
   });
 
   modeChips.forEach((chip) => {
@@ -847,9 +978,81 @@ function initControls() {
     });
   });
 
+  intensityBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const level = Number(btn.dataset.intensity) || 2;
+      intensityBtns.forEach((b) => b.classList.toggle('is-active', b === btn));
+      if (state.audio) {
+        Object.values(state.audio.agents).forEach((agent) => agent.setIntensity(level));
+      }
+      state.agentIntensity = level;
+      setStatus(`Band intensity: ${btn.textContent}`);
+    });
+  });
+
+  // QWERTY performance keys (AudioKeys-style):
+  // 1-7 = chord degree, space = drums on/off, Z X C V = drum one-shots.
+  window.addEventListener('keydown', (event) => {
+    if (event.repeat) return;
+    const tag = event.target?.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+
+    if (event.key >= '1' && event.key <= '7') {
+      const degree = Number(event.key) - 1;
+      const minor = state.left.value?.minor ?? false;
+      state.left.value = { degree, minor };
+      state.musicSignature = '';
+      setStatus(`Chord: ${minor ? 'minor ' : ''}${ROMAN[degree]}`);
+      return;
+    }
+
+    if (event.code === 'Space') {
+      event.preventDefault();
+      setAgentEnabled('drums', !state.agentFlags.drums);
+      setStatus(state.agentFlags.drums ? 'Drums on' : 'Drums off');
+      return;
+    }
+
+    const drumKey = { KeyZ: 'kick', KeyX: 'snare', KeyC: 'hihat', KeyV: 'clap' }[event.code];
+    if (drumKey && state.audio) {
+      state.audio.drums.trigger(drumKey);
+    }
+  });
+
   buildSeqGrid();
 
   startButton.addEventListener('click', toggleCamera);
+
+  recordButton.addEventListener('click', async () => {
+    // The click itself is a user gesture, so the audio graph may start here.
+    if (!state.audio && !ensureAudio()) {
+      setStatus('Recording unavailable — Web Audio blocked');
+      return;
+    }
+    const rec = state.audio.recorder;
+    if (rec.recording) {
+      const result = await rec.stop();
+      recordButton.classList.remove('is-recording');
+      recordButton.textContent = '● Rec';
+      if (result?.blob?.size) {
+        const url = rec.toDownloadUrl(result.blob);
+        const ext = result.type.includes('mp4') ? 'm4a' : 'webm';
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `turtletunez-jam-${Date.now()}.${ext}`;
+        link.click();
+        setStatus('Recording saved to your downloads');
+      } else {
+        setStatus('Recording stopped — nothing captured');
+      }
+    } else if (rec.start()) {
+      recordButton.classList.add('is-recording');
+      recordButton.textContent = '■ Stop';
+      setStatus('Recording your mix…');
+    } else {
+      setStatus('Recording not supported in this browser');
+    }
+  });
 
   video.addEventListener('loadedmetadata', syncOverlayToVideo);
   window.addEventListener('resize', syncOverlayToVideo);
