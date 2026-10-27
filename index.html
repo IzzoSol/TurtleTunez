@@ -153,6 +153,27 @@
               <input id="reverbSlider" type="range" min="0" max="100" step="1" value="25" />
             </label>
 
+            <div class="theme-box">
+              <h3>Theme &amp; light</h3>
+              <div class="theme-row" role="group" aria-label="Theme">
+                <button type="button" class="theme-chip is-active" data-theme="dark">Dark</button>
+                <button type="button" class="theme-chip" data-theme="light">Light</button>
+              </div>
+              <div class="accent-swatches" role="group" aria-label="Accent color">
+                <button type="button" class="accent-swatch is-active" data-accent="cyan" title="Cyan"></button>
+                <button type="button" class="accent-swatch" data-accent="violet" title="Violet"></button>
+                <button type="button" class="accent-swatch" data-accent="emerald" title="Emerald"></button>
+                <button type="button" class="accent-swatch" data-accent="amber" title="Amber"></button>
+                <button type="button" class="accent-swatch" data-accent="rose" title="Rose"></button>
+                <button type="button" class="accent-swatch" data-accent="coral" title="Coral"></button>
+              </div>
+              <button type="button" id="flashlightBtn" class="flashlight-btn">🔦 Flashlight (see in the dark)</button>
+              <div class="layout-toggle" role="group" aria-label="Drawer placement">
+                <button type="button" class="layout-chip is-active" data-layout="right">Right rail</button>
+                <button type="button" class="layout-chip" data-layout="bottom">Bottom bar</button>
+              </div>
+            </div>
+
             <div class="fx-box">
               <h3>FX chain</h3>
               <div class="fx-row">
@@ -283,6 +304,13 @@
               <p class="panel-note" id="brainStatus">Local command parser — no API key needed.</p>
               <details class="brain-settings">
                 <summary>Optional: connect an LLM (API key)</summary>
+                <div class="provider-row" role="group" aria-label="Provider">
+                  <button type="button" class="provider-chip" data-provider="openai">OpenAI</button>
+                  <button type="button" class="provider-chip" data-provider="grok">Grok (xAI)</button>
+                  <button type="button" class="provider-chip" data-provider="anthropic">Anthropic</button>
+                  <button type="button" class="provider-chip" data-provider="ollama">Ollama (local)</button>
+                  <button type="button" class="provider-chip" data-provider="custom">Custom</button>
+                </div>
                 <label class="field">Endpoint
                   <input id="brainEndpoint" type="text" placeholder="https://api.openai.com/v1/chat/completions" />
                 </label>

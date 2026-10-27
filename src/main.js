@@ -82,6 +82,11 @@ const brainEndpoint = $('brainEndpoint');
 const brainModel = $('brainModel');
 const brainKey = $('brainKey');
 const brainSaveBtn = $('brainSave');
+const themeChips = Array.from(document.querySelectorAll('.theme-chip'));
+const accentSwatches = Array.from(document.querySelectorAll('.accent-swatch'));
+const flashlightBtn = $('flashlightBtn');
+const layoutChips = Array.from(document.querySelectorAll('.layout-chip'));
+const providerChips = Array.from(document.querySelectorAll('.provider-chip'));
 const bpmInput = $('bpmInput');
 const seqGrid = $('seqGrid');
 const vizCanvas = $('vizCanvas');
@@ -1391,6 +1396,126 @@ function initControls() {
     brainStatus.textContent = hasLLM(s)
       ? 'Settings saved — LLM connected.'
       : 'Settings saved — using local parser (no endpoint/key).';
+  });
+
+  // ---- Theme + accent color ----
+  function applyTheme(theme) {
+    document.body.dataset.theme = theme;
+    localStorage.setItem('turtleTunez.theme', theme);
+    themeChips.forEach((c) => c.classList.toggle('is-active', c.dataset.theme === theme));
+  }
+
+  function applyAccent(accent) {
+    document.body.dataset.accent = accent;
+    localStorage.setItem('turtleTunez.accent', accent);
+    accentSwatches.forEach((s) => s.classList.toggle('is-active', s.dataset.accent === accent));
+  }
+
+  themeChips.forEach((c) => {
+    c.addEventListener('click', () => applyTheme(c.dataset.theme));
+  });
+  accentSwatches.forEach((s) => {
+    s.addEventListener('click', () => applyAccent(s.dataset.accent));
+  });
+
+  // Restore persisted theme/accent.
+  applyTheme(localStorage.getItem('turtleTunez.theme') || 'dark');
+  applyAccent(localStorage.getItem('turtleTunez.accent') || 'cyan');
+
+  // ---- Flashlight (torch constraint + screen wash fallback) ----
+  flashlightBtn.addEventListener('click', async () => {
+    const on = !flashlightBtn.classList.contains('is-on');
+    flashlightBtn.classList.toggle('is-on', on);
+    document.body.classList.toggle('flashlight-on', on);
+    flashlightBtn.textContent = on ? '🔦 Flashlight on' : '🔦 Flashlight (see in the dark)';
+
+    // Try the real torch if the camera is running.
+    if (on && state.running && state.stream) {
+      const track = state.stream.getVideoTracks()[0];
+      const caps = track?.getCapabilities?.();
+      if (caps?.torch) {
+        try {
+          await track.applyConstraints({ advanced: [{ torch: true }] });
+        } catch {
+          /* fall back to screen wash (already applied via class) */
+        }
+      }
+    } else if (!on && state.running && state.stream) {
+      const track = state.stream.getVideoTracks()[0];
+      try {
+        await track.applyConstraints({ advanced: [{ torch: false }] });
+      } catch {
+        /* noop */
+      }
+    }
+  });
+
+  // ---- Drawer placement: right rail vs bottom tab bar ----
+  function applyLayout(layout) {
+    document.body.classList.toggle('layout-bottom', layout === 'bottom');
+    localStorage.setItem('turtleTunez.layout', layout);
+    layoutChips.forEach((c) => c.classList.toggle('is-active', c.dataset.layout === layout));
+  }
+  layoutChips.forEach((c) => {
+    c.addEventListener('click', () => applyLayout(c.dataset.layout));
+  });
+  applyLayout(localStorage.getItem('turtleTunez.layout') || 'right');
+
+  // ---- Provider presets for the agent brain ----
+  const PROVIDERS = {
+    openai: { endpoint: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o-mini' },
+    grok: { endpoint: 'https://api.x.ai/v1/chat/completions', model: 'grok-2-latest' },
+    anthropic: { endpoint: 'https://api.anthropic.com/v1/messages', model: 'claude-3-5-sonnet-20241022' },
+    ollama: { endpoint: 'http://localhost:11434/v1/chat/completions', model: 'llama3.2' },
+    custom: { endpoint: '', model: '' },
+  };
+  providerChips.forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const p = PROVIDERS[chip.dataset.provider];
+      if (p) {
+        brainEndpoint.value = p.endpoint;
+        brainModel.value = p.model;
+        providerChips.forEach((c) => c.classList.toggle('is-active', c === chip));
+        setStatus(`Provider: ${chip.textContent}`);
+      }
+    });
+  });
+
+  // ---- Test connection button ----
+  const testBtn = document.createElement('button');
+  testBtn.type = 'button';
+  testBtn.className = 'apply-button';
+  testBtn.style.marginTop = '8px';
+  testBtn.textContent = 'Test connection';
+  brainSaveBtn.insertAdjacentElement('afterend', testBtn);
+  testBtn.addEventListener('click', async () => {
+    const s = {
+      endpoint: brainEndpoint.value.trim(),
+      model: brainModel.value.trim(),
+      key: brainKey.value.trim(),
+    };
+    if (!s.endpoint) {
+      brainStatus.textContent = 'Enter an endpoint first.';
+      return;
+    }
+    brainStatus.textContent = 'Testing…';
+    try {
+      const res = await fetch(s.endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: s.key ? `Bearer ${s.key}` : '',
+        },
+        body: JSON.stringify({
+          model: s.model,
+          messages: [{ role: 'user', content: 'Reply with the single word: ok' }],
+          max_tokens: 8,
+        }),
+      });
+      brainStatus.textContent = res.ok ? 'Connection OK ✓' : `Connection failed (${res.status})`;
+    } catch (e) {
+      brainStatus.textContent = `Connection error: ${e?.message ?? e}`;
+    }
   });
   euclidApply.addEventListener('click', () => {
     const pattern = euclidDrumPattern({
