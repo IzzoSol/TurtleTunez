@@ -25,7 +25,8 @@
   --radius-sm: 8px;
   --topbar-h: 60px;
   --rail-w: 60px;
-  --drawer-w: 360px;
+  --drawer-w: 420px;
+  --drawer-expanded-w: 720px;
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
@@ -458,8 +459,8 @@ input:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 14px 8px;
+  gap: 12px;
+  padding: 16px 10px;
   background: var(--panel);
   border-left: 1px solid var(--border);
   backdrop-filter: blur(14px);
@@ -467,37 +468,48 @@ input:focus-visible {
 }
 
 .rail-btn {
-  width: 44px;
-  height: 48px;
+  width: 56px;
+  height: 64px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1px;
-  border: 1px solid transparent;
+  gap: 3px;
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--muted-2);
-  font-size: 17px;
+  background: rgba(148, 163, 184, 0.06);
+  color: var(--muted);
+  font-size: 20px;
   transition: all 160ms var(--ease);
+  cursor: pointer;
+  position: relative;
 }
 
 .rail-btn small {
-  font-size: 0.5rem;
+  font-size: 0.55rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  opacity: 0.7;
 }
 
 .rail-btn:hover {
-  background: rgba(148, 163, 184, 0.08);
+  background: rgba(148, 163, 184, 0.12);
   color: var(--text);
+  border-color: var(--border-strong);
+  transform: translateX(-2px);
+  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.2);
 }
 
 .rail-btn.is-active {
-  background: linear-gradient(135deg, rgba(125, 211, 252, 0.18), rgba(167, 139, 250, 0.18));
-  border-color: var(--border-strong);
+  background: linear-gradient(135deg, rgba(125, 211, 252, 0.22), rgba(167, 139, 250, 0.22));
+  border-color: var(--accent);
   color: var(--accent);
+  box-shadow: -4px 0 16px rgba(125, 211, 252, 0.2);
+}
+
+.rail-btn.is-active small {
+  opacity: 1;
 }
 
 /* ============================ Drawer ============================ */
@@ -1493,6 +1505,365 @@ body.layout-bottom .drawer.is-open {
   color: var(--text);
   padding: 9px 12px;
   font-size: 0.82rem;
+}
+
+/* ============================ Onboarding overlay ============================ */
+
+.onboard-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 6, 15, 0.85);
+  backdrop-filter: blur(8px);
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  animation: fadeIn 240ms var(--ease);
+}
+
+.onboard-card {
+  width: min(560px, 100%);
+  background: var(--panel-solid);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: 28px 30px 24px;
+  box-shadow: 0 40px 90px rgba(0, 0, 0, 0.6);
+  position: relative;
+}
+
+.onboard-card h2 {
+  margin: 0 0 6px;
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+}
+
+.onboard-card .onboard-sub {
+  margin: 0 0 18px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.onboard-step {
+  display: none;
+  gap: 10px;
+}
+
+.onboard-step.is-active {
+  display: grid;
+}
+
+.onboard-step h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+  color: var(--accent);
+}
+
+.onboard-step p {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.onboard-step .onboard-glyph {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.onboard-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 18px;
+  gap: 10px;
+}
+
+.onboard-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.onboard-dots i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(148, 163, 184, 0.25);
+  transition: all 180ms var(--ease);
+}
+
+.onboard-dots i.is-active {
+  background: var(--accent);
+  transform: scale(1.25);
+}
+
+.onboard-btn {
+  border: 0;
+  border-radius: 999px;
+  padding: 9px 18px;
+  font-weight: 700;
+  font-size: 0.8rem;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #071522;
+  cursor: pointer;
+  transition: transform 150ms var(--ease);
+}
+
+.onboard-btn:hover {
+  transform: translateY(-1px);
+}
+
+.onboard-btn.ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.onboard-btn.ghost:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.onboard-skip {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  border: 0;
+  background: transparent;
+  color: var(--muted-2);
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+/* ============================ User presets ============================ */
+
+.preset-box {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+}
+
+.preset-box h3 {
+  margin: 0 0 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+
+.preset-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.preset-row input {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  color: var(--text);
+  padding: 9px 12px;
+  font-size: 0.82rem;
+}
+
+.preset-row button {
+  border: 0;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #071522;
+  padding: 9px 14px;
+  font-weight: 700;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.preset-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.05);
+  font-size: 0.78rem;
+}
+
+.preset-item strong {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preset-item button {
+  border: 0;
+  background: transparent;
+  color: var(--muted-2);
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 700;
+  transition: all 130ms var(--ease);
+}
+
+.preset-item button:hover {
+  color: var(--accent);
+  background: rgba(125, 211, 252, 0.1);
+}
+
+.preset-item button.danger:hover {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.12);
+}
+
+body.layout-expand .drawer {
+  width: min(var(--drawer-expanded-w), calc(100vw - var(--rail-w) - 24px));
+}
+
+body.layout-expand .drawer-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-content: start;
+}
+
+body.layout-expand .drawer-panel > * {
+  min-width: 0;
+}
+
+/* Muse mode — visualizer takes the stage with a gentle pulsing backdrop */
+.stage[data-mode='muse'] .camera-wrap {
+  opacity: 0.35;
+  filter: blur(2px) brightness(0.6);
+  transition: all 400ms var(--ease);
+}
+
+.stage[data-mode='muse'] .viz-stage {
+  display: block;
+}
+
+.stage[data-mode='muse'] .viz-hint::before {
+  content: 'Muse is composing… ';
+}
+
+/* ============================ Rail style toggles ============================ */
+
+body.rail-style-labeled .rail-btn {
+  flex-direction: row;
+  width: 100%;
+  height: 44px;
+  justify-content: flex-start;
+  padding-left: 12px;
+  gap: 10px;
+}
+
+body.rail-style-labeled .rail-btn small {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  opacity: 1;
+  font-weight: 600;
+}
+
+body.rail-style-expanded .drawer-rail {
+  flex: 0 0 200px;
+}
+
+body.rail-style-expanded .rail-btn {
+  flex-direction: row;
+  width: 100%;
+  height: 56px;
+  justify-content: flex-start;
+  padding-left: 14px;
+  gap: 12px;
+}
+
+body.rail-style-expanded .rail-btn small {
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  opacity: 1;
+  font-weight: 600;
+}
+
+body.rail-style-compact .rail-btn {
+  width: 40px;
+  height: 44px;
+  font-size: 18px;
+}
+
+body.rail-style-compact .rail-btn small {
+  display: none;
+}
+
+/* Bottom bar layout — horizontal tab bar with icons + labels */
+body.layout-bottom .drawer-rail {
+  flex-direction: row;
+  flex: 0 0 auto;
+  height: 64px;
+  border-left: 0;
+  border-top: 1px solid var(--border);
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+body.layout-bottom .rail-btn {
+  flex-direction: row;
+  width: auto;
+  height: 48px;
+  padding: 0 16px;
+  gap: 8px;
+}
+
+body.layout-bottom .rail-btn small {
+  font-size: 0.7rem;
+  opacity: 1;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-weight: 600;
+}
+
+body.layout-bottom .drawer {
+  top: auto;
+  left: 12px;
+  right: 12px;
+  bottom: calc(64px + 12px);
+  width: auto;
+  max-width: 720px;
+  margin: 0 auto;
+  transform: translateY(calc(100% + 24px));
+}
+
+body.layout-bottom .drawer.is-open {
+  transform: translateY(0);
+}
+
+/* Expand layout — drawer takes more space */
+body.layout-expand .drawer {
+  width: min(560px, calc(100vw - var(--rail-w) - 24px));
+}
+
+body.layout-expand .drawer-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-content: start;
+}
+
+body.layout-expand .drawer-panel > * {
+  min-width: 0;
 }
 
 /* ============================ Responsive ============================ */

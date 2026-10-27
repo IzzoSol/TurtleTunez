@@ -25,7 +25,7 @@ const PITCH_NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb',
 const KEY_SEMITONES = { C: 0, Db: 1, D: 2, Eb: 3, E: 4, F: 5, Gb: 6, G: 7, Ab: 8, A: 9, Bb: 10, B: 11 };
 const KEY_OPTIONS = Object.keys(KEY_SEMITONES);
 const PATTERN_ORDER = ['trap', 'house', 'hiphop', 'lofi', 'techno'];
-const MODES = ['solo', 'duo', 'band', 'beats', 'sample', 'cymatics'];
+const MODES = ['solo', 'duo', 'band', 'beats', 'sample', 'cymatics', 'muse'];
 const DRAWER_TITLES = { sound: 'Sound', beats: 'Beats', sample: 'Sample', agents: 'Agents', guide: 'Guide' };
 
 const HAND_BONES = [
@@ -134,6 +134,8 @@ const state = {
   mode: 'solo',
   agentFlags: { drums: false, bass: false, arp: false, pad: false, strings: false },
   agentIntensity: 2,
+  museTimer: null,
+  museStep: 0,
   seqCustom: null,
   chordNotes: [48, 52, 55],
   playheadStep: -1,
@@ -616,6 +618,29 @@ function applySampleHands(leftLm, rightLm) {
   }
 }
 
+const MUSE_PROGRESSION = [0, 4, 5, 3]; // I - V - vi - IV
+
+function startMuse() {
+  stopMuse();
+  state.museStep = 0;
+  const advance = () => {
+    const degree = MUSE_PROGRESSION[state.museStep % MUSE_PROGRESSION.length];
+    state.museStep += 1;
+    const minor = degree === 2 || degree === 5; // iii and vi are minor
+    state.left.value = { degree, minor };
+    state.musicSignature = '';
+    setStatus(`Muse · ${minor ? ROMAN[degree].toLowerCase() : ROMAN[degree]}`);
+  };
+  advance();
+  const interval = (60 / state.bpm) * 4 * 1000;
+  state.museTimer = setInterval(advance, interval);
+}
+
+function stopMuse() {
+  if (state.museTimer) clearInterval(state.museTimer);
+  state.museTimer = null;
+}
+
 function processFrame(now) {
   if (video.currentTime === state.lastVideoTime) return;
   state.lastVideoTime = video.currentTime;
@@ -835,7 +860,7 @@ function stopCamera() {
   ctx2d.clearRect(0, 0, canvas.width, canvas.height);
   cameraIdle.classList.remove('is-hidden');
   setStartButton('Start camera');
-  setStatus(state.mode === 'beats' ? 'Beat maker — drums free' : 'Camera off');
+  setStatus(state.mode === 'beats' ? 'Beat maker — drums free' : state.mode === 'cymatics' ? 'Cymatics — start camera to visualize' : state.mode === 'muse' ? 'Muse — auto-composing' : state.mode === 'sample' ? 'Sample deck — import a song' : 'Camera off');
 }
 
 function toggleCamera() {
@@ -854,8 +879,12 @@ function buildSeqGrid() {
       cell.className = 'seq-cell';
       cell.dataset.row = row;
       cell.dataset.step = String(step);
+      cell.setAttribute('role', 'gridcell');
+      cell.setAttribute('aria-pressed', String(!!pattern[row]?.[step]));
+      cell.setAttribute('aria-label', `${row} step ${step + 1}`);
+      cell.tabIndex = 0;
       if (pattern[row]?.[step]) cell.classList.add('on');
-      cell.addEventListener('click', () => {
+      const toggle = () => {
         const custom = state.seqCustom || {
           kick: [...(currentPattern().kick || [])],
           snare: [...(currentPattern().snare || [])],
@@ -867,7 +896,12 @@ function buildSeqGrid() {
         custom[row][step] = custom[row][step] ? 0 : 1;
         state.seqCustom = custom;
         cell.classList.toggle('on');
+        cell.setAttribute('aria-pressed', String(!!custom[row][step]));
         if (state.audio) state.audio.drums.setCustom(custom);
+      };
+      cell.addEventListener('click', toggle);
+      cell.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
       });
       seqGrid.appendChild(cell);
     }
@@ -916,7 +950,13 @@ function applyMode(mode) {
   const prevMode = state._prevMode;
   state.mode = mode;
   stage.dataset.mode = mode;
-  vizStage.hidden = mode !== 'cymatics';
+  // Cymatics mode: full-screen visualizer.
+  if (mode === 'cymatics') {
+    vizStage.hidden = false;
+    if (!state.running) setStatus('Cymatics — start camera to visualize');
+  } else {
+    vizStage.hidden = true;
+  }
   modeChips.forEach((chip) => chip.classList.toggle('is-active', chip.dataset.mode === mode));
   updateVizRunState();
   syncOverlayToVideo();
@@ -950,6 +990,18 @@ function applyMode(mode) {
     if (!state.running) setStatus('Sample mode — import a song');
   } else if (prevMode === 'sample') {
     // leaving sample mode — nothing to tear down, deck stays ready
+  }
+
+  // Muse mode: generative agent composes a chord progression + band.
+  if (mode === 'muse') {
+    ensureAudio();
+    ['drums', 'bass', 'arp', 'pad', 'strings'].forEach((name) => setAgentEnabled(name, true));
+    openDrawer('agents');
+    startMuse();
+    if (!state.running) setStatus('Muse mode — composing…');
+  } else if (prevMode === 'muse') {
+    stopMuse();
+    ['drums', 'bass', 'arp', 'pad', 'strings'].forEach((name) => setAgentEnabled(name, false));
   }
 
   // Hand count changes between solo/duo — rebuild the landmarker live if needed.
@@ -1452,7 +1504,9 @@ function initControls() {
 
   // ---- Drawer placement: right rail vs bottom tab bar ----
   function applyLayout(layout) {
-    document.body.classList.toggle('layout-bottom', layout === 'bottom');
+    document.body.classList.remove('layout-bottom', 'layout-expand');
+    if (layout === 'bottom') document.body.classList.add('layout-bottom');
+    if (layout === 'expand') document.body.classList.add('layout-expand');
     localStorage.setItem('turtleTunez.layout', layout);
     layoutChips.forEach((c) => c.classList.toggle('is-active', c.dataset.layout === layout));
   }
@@ -1460,6 +1514,19 @@ function initControls() {
     c.addEventListener('click', () => applyLayout(c.dataset.layout));
   });
   applyLayout(localStorage.getItem('turtleTunez.layout') || 'right');
+
+  // ---- Rail style: compact / labeled / expanded ----
+  const railStyleChips = Array.from(document.querySelectorAll('[data-railstyle]'));
+  function applyRailStyle(style) {
+    document.body.classList.remove('rail-style-compact', 'rail-style-labeled', 'rail-style-expanded');
+    document.body.classList.add(`rail-style-${style}`);
+    localStorage.setItem('turtleTunez.railStyle', style);
+    railStyleChips.forEach((c) => c.classList.toggle('is-active', c.dataset.railstyle === style));
+  }
+  railStyleChips.forEach((c) => {
+    c.addEventListener('click', () => applyRailStyle(c.dataset.railstyle));
+  });
+  applyRailStyle(localStorage.getItem('turtleTunez.railStyle') || 'labeled');
 
   // ---- Provider presets for the agent brain ----
   const PROVIDERS = {
@@ -1481,6 +1548,21 @@ function initControls() {
     });
   });
 
+  // Grok Vision shortcut
+  const grokVisionChip = document.createElement('button');
+  grokVisionChip.type = 'button';
+  grokVisionChip.className = 'provider-chip';
+  grokVisionChip.textContent = 'Grok Vision';
+  const providerRow = document.querySelector('.provider-row');
+  if (providerRow) providerRow.appendChild(grokVisionChip);
+  grokVisionChip.addEventListener('click', () => {
+    brainEndpoint.value = 'https://api.x.ai/v1/chat/completions';
+    brainModel.value = 'grok-2-vision-latest';
+    providerChips.forEach((c) => c.classList.remove('is-active'));
+    grokVisionChip.classList.add('is-active');
+    brainStatus.textContent = 'Grok Vision selected — add your xAI key';
+  });
+
   // ---- Test connection button ----
   const testBtn = document.createElement('button');
   testBtn.type = 'button';
@@ -1488,6 +1570,43 @@ function initControls() {
   testBtn.style.marginTop = '8px';
   testBtn.textContent = 'Test connection';
   brainSaveBtn.insertAdjacentElement('afterend', testBtn);
+  // Import settings from a JSON file (agent API import).
+  const importBtn = document.createElement('button');
+  importBtn.type = 'button';
+  importBtn.className = 'apply-button';
+  importBtn.style.marginTop = '6px';
+  importBtn.style.background = 'transparent';
+  importBtn.style.border = '1px solid var(--border)';
+  importBtn.style.color = 'var(--muted)';
+  importBtn.textContent = '📂 Import settings from JSON';
+  testBtn.insertAdjacentElement('afterend', importBtn);
+
+  const importInput = document.createElement('input');
+  importInput.type = 'file';
+  importInput.accept = 'application/json,.json';
+  importInput.style.display = 'none';
+  importBtn.insertAdjacentElement('afterend', importInput);
+
+  importBtn.addEventListener('click', () => importInput.click());
+  importInput.addEventListener('change', (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        if (data.endpoint) brainEndpoint.value = data.endpoint;
+        if (data.model) brainModel.value = data.model;
+        if (data.key) brainKey.value = data.key;
+        brainStatus.textContent = `Imported settings from ${file.name}`;
+      } catch (err) {
+        brainStatus.textContent = `Import failed: ${err?.message || err}`;
+      }
+    };
+    reader.readAsText(file);
+    importInput.value = '';
+  });
+
   testBtn.addEventListener('click', async () => {
     const s = {
       endpoint: brainEndpoint.value.trim(),
@@ -1601,6 +1720,152 @@ function initControls() {
       state.audio.drums.trigger(drumKey);
     }
   });
+
+  // Undo/redo on the sequencer.
+  function undoSeq() {
+    if (!state.seqHistory?.length) return;
+    const prev = JSON.parse(state.seqHistory.pop());
+    if (state.seqCustom) {
+      state.seqFuture = state.seqFuture || [];
+      state.seqFuture.push(JSON.stringify(state.seqCustom));
+    }
+    state.seqCustom = prev;
+    if (state.audio) state.audio.drums.setCustom(prev);
+    buildSeqGrid();
+    setStatus('Undo');
+  }
+  function redoSeq() {
+    if (!state.seqFuture?.length) return;
+    const next = JSON.parse(state.seqFuture.pop());
+    if (state.seqCustom) {
+      state.seqHistory = state.seqHistory || [];
+      state.seqHistory.push(JSON.stringify(state.seqCustom));
+    }
+    state.seqCustom = next;
+    if (state.audio) state.audio.drums.setCustom(next);
+    buildSeqGrid();
+    setStatus('Redo');
+  }
+
+  window.addEventListener('keydown', (event) => {
+    if (!(event.ctrlKey || event.metaKey)) return;
+    const tag = event.target?.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+    if (event.key === 'z' && event.shiftKey) { event.preventDefault(); redoSeq(); }
+    else if (event.key === 'z') { event.preventDefault(); undoSeq(); }
+  });
+  initSampleUI();
+
+  // ---- Onboarding tour (first visit only) ----
+  const onboardBackdrop = $('onboardBackdrop');
+  const onboardSkip = $('onboardSkip');
+  const onboardNext = $('onboardNext');
+  const onboardPrev = $('onboardPrev');
+  const onboardDots = onboardBackdrop.querySelectorAll('.onboard-dots i');
+  const onboardSteps = Array.from(onboardBackdrop.querySelectorAll('.onboard-step'));
+  let onboardIndex = 0;
+  function showOnboardStep(i) {
+    onboardIndex = Math.max(0, Math.min(onboardSteps.length - 1, i));
+    onboardSteps.forEach((s, idx) => s.classList.toggle('is-active', idx === onboardIndex));
+    onboardDots.forEach((d, idx) => d.classList.toggle('is-active', idx === onboardIndex));
+    onboardPrev.style.visibility = onboardIndex === 0 ? 'hidden' : 'visible';
+    onboardNext.textContent = onboardIndex === onboardSteps.length - 1 ? 'Finish' : 'Next';
+  }
+  function closeOnboard() {
+    onboardBackdrop.hidden = true;
+    localStorage.setItem('turtleTunez.onboarded', '1');
+  }
+  onboardNext.addEventListener('click', () => {
+    if (onboardIndex === onboardSteps.length - 1) closeOnboard();
+    else showOnboardStep(onboardIndex + 1);
+  });
+  onboardPrev.addEventListener('click', () => showOnboardStep(onboardIndex - 1));
+  onboardSkip.addEventListener('click', closeOnboard);
+  if (!localStorage.getItem('turtleTunez.onboarded')) {
+    onboardBackdrop.hidden = false;
+    showOnboardStep(0);
+  }
+
+  // ---- User presets (save/load/delete) ----
+  const soundPanel = document.querySelector('.drawer-panel[data-panel="sound"]');
+  const presetBox = document.createElement('div');
+  presetBox.className = 'preset-box';
+  presetBox.innerHTML = `
+    <h3>User presets</h3>
+    <div class="preset-row">
+      <input id="presetNameInput" type="text" placeholder="Name this preset…" />
+      <button type="button" id="presetSaveBtn">Save</button>
+    </div>
+    <div class="preset-list" id="presetList"></div>
+  `;
+  soundPanel.appendChild(presetBox);
+
+  const PRESET_STORAGE_KEY = 'turtleTunez.userPresets';
+  function loadUserPresets() {
+    try { return JSON.parse(localStorage.getItem(PRESET_STORAGE_KEY) || '[]'); }
+    catch { return []; }
+  }
+  function saveUserPresets(list) {
+    localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(list));
+  }
+  function capturePresetState() {
+    return {
+      preset: state.preset,
+      tuning: state.tuning,
+      bpm: state.bpm,
+      drumPattern: drumPatternSelect.value,
+      groove: Number(grooveSelect.value) || 0,
+      reverbWet: state.reverbWet,
+      agentFlags: { ...state.agentFlags },
+      agentIntensity: state.agentIntensity,
+      mode: state.mode,
+    };
+  }
+  function applyPresetState(s) {
+    if (!s) return;
+    if (s.preset) applyPreset(s.preset);
+    if (s.tuning) { state.tuning = s.tuning; tuningSelect.value = s.tuning; state.musicSignature = ''; }
+    if (s.bpm) { state.bpm = s.bpm; bpmInput.value = String(s.bpm); syncStudioToState(); }
+    if (s.drumPattern) { drumPatternSelect.value = s.drumPattern; drumPatternSelect.dispatchEvent(new Event('change')); }
+    if (s.groove != null) { grooveSelect.value = String(s.groove); grooveSelect.dispatchEvent(new Event('change')); }
+    if (s.reverbWet != null) { state.reverbWet = s.reverbWet; reverbSlider.value = String(Math.round(s.reverbWet * 100)); reverbValue.textContent = `${reverbSlider.value}%`; state.audio?.reverb.setWet(s.reverbWet); }
+    if (s.agentFlags) Object.entries(s.agentFlags).forEach(([name, on]) => setAgentEnabled(name, !!on));
+    if (s.agentIntensity) { state.agentIntensity = s.agentIntensity; if (state.audio) Object.values(state.audio.agents).forEach((a) => a.setIntensity(s.agentIntensity)); }
+    if (s.mode) applyMode(s.mode);
+  }
+  function renderPresetList() {
+    const list = loadUserPresets();
+    const el = document.getElementById('presetList');
+    el.innerHTML = '';
+    if (list.length === 0) {
+      el.innerHTML = '<p class="panel-note" style="text-align:center;padding:12px">No saved presets yet.</p>';
+      return;
+    }
+    list.forEach((p, index) => {
+      const item = document.createElement('div');
+      item.className = 'preset-item';
+      item.innerHTML = `<strong>${p.name}</strong><button data-action="load">Load</button><button data-action="delete" class="danger">✕</button>`;
+      item.querySelector('[data-action="load"]').addEventListener('click', () => { applyPresetState(p.state); setStatus(`Loaded preset: ${p.name}`); });
+      item.querySelector('[data-action="delete"]').addEventListener('click', () => {
+        const list2 = loadUserPresets();
+        list2.splice(index, 1);
+        saveUserPresets(list2);
+        renderPresetList();
+      });
+      el.appendChild(item);
+    });
+  }
+  document.getElementById('presetSaveBtn').addEventListener('click', () => {
+    const name = document.getElementById('presetNameInput').value.trim();
+    if (!name) { setStatus('Enter a preset name first'); return; }
+    const list = loadUserPresets();
+    list.unshift({ name, state: capturePresetState(), createdAt: Date.now() });
+    saveUserPresets(list);
+    document.getElementById('presetNameInput').value = '';
+    renderPresetList();
+    setStatus(`Saved preset: ${name}`);
+  });
+  renderPresetList();
 
   buildSeqGrid();
   buildBeatBrowser();

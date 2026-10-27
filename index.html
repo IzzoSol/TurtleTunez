@@ -29,6 +29,7 @@
           <button type="button" class="mode-chip" data-mode="beats">Beats</button>
           <button type="button" class="mode-chip" data-mode="sample">Sample</button>
           <button type="button" class="mode-chip" data-mode="cymatics">Cymatics</button>
+          <button type="button" class="mode-chip" data-mode="muse">Muse</button>
         </nav>
 
         <div class="topbar-right">
@@ -171,6 +172,12 @@
               <div class="layout-toggle" role="group" aria-label="Drawer placement">
                 <button type="button" class="layout-chip is-active" data-layout="right">Right rail</button>
                 <button type="button" class="layout-chip" data-layout="bottom">Bottom bar</button>
+                <button type="button" class="layout-chip" data-layout="expand">Expand</button>
+               <div class="rail-style-toggle" role="group" aria-label="Rail style" style="display:flex;gap:6px;margin-top:10px">
+                 <button type="button" class="layout-chip is-active" data-railstyle="labeled">Labeled</button>
+                 <button type="button" class="layout-chip" data-railstyle="compact">Compact</button>
+                 <button type="button" class="layout-chip" data-railstyle="expanded">Wide</button>
+               </div>
               </div>
             </div>
 
@@ -398,6 +405,41 @@
             </p>
           </section>
         </aside>
+      </div>
+    </div>
+
+    <div class="onboard-backdrop" id="onboardBackdrop" hidden>
+      <div class="onboard-card">
+        <button type="button" class="onboard-skip" id="onboardSkip">Skip tour</button>
+        <div class="onboard-step is-active" data-step="0">
+          <div class="onboard-glyph">👋</div>
+          <h3>Welcome to TurtleTunez</h3>
+          <p>A gesture-controlled music studio. Your webcam is the controller — one hand shapes harmony, the other sculpts expression.</p>
+        </div>
+        <div class="onboard-step" data-step="1">
+          <div class="onboard-glyph">✋</div>
+          <h3>Left hand = harmony</h3>
+          <p>Fingers pick the chord degree (I–VII), tilt picks major/minor. Try holding 1 finger up, then 2, 3…</p>
+        </div>
+        <div class="onboard-step" data-step="2">
+          <div class="onboard-glyph">🤚</div>
+          <h3>Right hand = expression</h3>
+          <p>Wrist height = volume, fingers = voicing, thumb = octave up, tilt = filter sweep.</p>
+        </div>
+        <div class="onboard-step" data-step="3">
+          <div class="onboard-glyph">🎛</div>
+          <h3>Pick a mode</h3>
+          <p>Solo, Duo, Band (agents join you), Beats (drum machine focus), Sample (import a song), Cymatics (visuals), Muse (auto-composes). Pop out the right drawer for sound, beats, agents, and the guide.</p>
+        </div>
+        <div class="onboard-nav">
+          <div class="onboard-dots">
+            <i class="is-active"></i><i></i><i></i><i></i>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button type="button" class="onboard-btn ghost" id="onboardPrev">Back</button>
+            <button type="button" class="onboard-btn" id="onboardNext">Next</button>
+          </div>
+        </div>
       </div>
     </div>
 
