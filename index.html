@@ -27,6 +27,7 @@
           <button type="button" class="mode-chip" data-mode="duo">Duo</button>
           <button type="button" class="mode-chip" data-mode="band">Band</button>
           <button type="button" class="mode-chip" data-mode="beats">Beats</button>
+          <button type="button" class="mode-chip" data-mode="sample">Sample</button>
           <button type="button" class="mode-chip" data-mode="cymatics">Cymatics</button>
         </nav>
 
@@ -67,6 +68,7 @@
         <nav class="drawer-rail" aria-label="Studio panels">
           <button type="button" class="rail-btn" data-tab="sound" title="Sound">🎛<small>Sound</small></button>
           <button type="button" class="rail-btn" data-tab="beats" title="Beats">🥁<small>Beats</small></button>
+          <button type="button" class="rail-btn" data-tab="sample" title="Sample">🎵<small>Sample</small></button>
           <button type="button" class="rail-btn" data-tab="agents" title="Agents">🤖<small>Agents</small></button>
           <button type="button" class="rail-btn" data-tab="guide" title="Guide">❓<small>Guide</small></button>
         </nav>
@@ -150,58 +152,31 @@
               Reverb <span id="reverbValue" class="field-value">25%</span>
               <input id="reverbSlider" type="range" min="0" max="100" step="1" value="25" />
             </label>
+
+            <div class="fx-box">
+              <h3>FX chain</h3>
+              <div class="fx-row">
+                <button type="button" class="fx-chip is-active" data-fx="delay">Delay</button>
+                <button type="button" class="fx-chip is-active" data-fx="chorus">Chorus</button>
+                <button type="button" class="fx-chip is-active" data-fx="phaser">Phaser</button>
+                <button type="button" class="fx-chip" data-fx="overdrive">Overdrive</button>
+                <button type="button" class="fx-chip" data-fx="pingpong">Ping-Pong</button>
+                <button type="button" class="fx-chip" data-fx="bitcrush">Bitcrush</button>
+              </div>
+            </div>
           </section>
           <section class="drawer-panel" data-panel="beats" hidden>
-            <label class="field">
+            <label class="field" hidden>
               Beat pattern
               <select id="drumPatternSelect">
-                <optgroup label="Trap">
-                  <option value="trap">Trap Basic</option>
-                  <option value="trapRoll">Trap Roll</option>
-                  <option value="trapHeavy">Trap Heavy</option>
-                </optgroup>
-                <optgroup label="House">
-                  <option value="house">House Four on Floor</option>
-                  <option value="houseDeep">House Deep</option>
-                  <option value="houseTech">House Tech</option>
-                  <option value="disco">Disco</option>
-                </optgroup>
-                <optgroup label="Hip-Hop">
-                  <option value="hiphop">Hip-Hop Boom Bap</option>
-                  <option value="hiphopClassic">Hip-Hop Classic</option>
-                  <option value="rnb">R&B Pocket</option>
-                </optgroup>
-                <optgroup label="Lo-Fi">
-                  <option value="lofi">Lo-Fi Dusty</option>
-                  <option value="lofiJazz">Lo-Fi Jazz</option>
-                </optgroup>
-                <optgroup label="Techno">
-                  <option value="techno">Techno Driving</option>
-                  <option value="technoIndustrial">Techno Industrial</option>
-                </optgroup>
-                <optgroup label="Bass">
-                  <option value="dnb">DnB Break</option>
-                  <option value="dnbRoll">DnB Roll</option>
-                  <option value="dubstep">Dubstep Wobble</option>
-                  <option value="garage">UK Garage</option>
-                </optgroup>
-                <optgroup label="World">
-                  <option value="afrobeat">Afrobeat</option>
-                  <option value="latin">Latin Son Clave</option>
-                  <option value="reggae">Reggae One Drop</option>
-                </optgroup>
-                <optgroup label="Band">
-                  <option value="rock">Rock Backbeat</option>
-                  <option value="pop">Pop Radio</option>
-                  <option value="funk">Funk Syncopated</option>
-                  <option value="jazz">Jazz Swing</option>
-                  <option value="bossa">Bossa Nova</option>
-                  <option value="blues">Blues Shuffle</option>
-                  <option value="ballad">Ballad Simple</option>
-                  <option value="ambient">Ambient Sparse</option>
-                </optgroup>
+                <option value="trap">Trap Basic</option>
               </select>
             </label>
+
+            <div class="beat-browser-box">
+              <h3>Beat browser</h3>
+              <div class="beat-browser" id="beatBrowser"></div>
+            </div>
 
             <div class="beat-row">
               <label class="field">
@@ -251,8 +226,75 @@
             </div>
           </section>
 
+          <!-- Sample panel -->
+          <section class="drawer-panel" data-panel="sample" hidden>
+            <p class="panel-note">Import a song — slice it on the beat grid, loop sections, scratch with your hand.</p>
+
+            <button type="button" class="import-button" id="sampleImport">⬆ Import song</button>
+            <input type="file" id="sampleFile" accept="audio/*" hidden />
+
+            <div class="sample-empty" id="sampleEmpty">
+              <p>No song loaded yet. Drop an MP3/WAV in and the deck slices it to the detected BPM.</p>
+            </div>
+
+            <div class="sample-deck" id="sampleDeckUI" hidden>
+              <div class="sample-meta">
+                <strong id="sampleName">—</strong>
+                <span id="sampleBpm">— BPM</span>
+              </div>
+
+              <div class="waveform-wrap">
+                <canvas id="waveformCanvas"></canvas>
+                <div class="waveform-cursor" id="waveformCursor"></div>
+              </div>
+
+              <div class="sample-transport">
+                <button type="button" class="transport-btn" id="samplePlay" title="Play / pause">▶</button>
+                <button type="button" class="transport-btn" id="sampleStop" title="Stop">■</button>
+                <button type="button" class="transport-btn" id="sampleReverse" title="Reverse">⇄</button>
+                <button type="button" class="transport-btn" id="sampleLoopClear" title="Clear loop">∞✕</button>
+                <button type="button" class="transport-btn" id="sampleMatchBpm" title="Match drum BPM to song">♩</button>
+              </div>
+
+              <div class="rate-row">
+                <button type="button" class="rate-btn" data-rate="0.5">½×</button>
+                <button type="button" class="rate-btn is-active" data-rate="1">1×</button>
+                <button type="button" class="rate-btn" data-rate="1.5">1.5×</button>
+                <button type="button" class="rate-btn" data-rate="2">2×</button>
+              </div>
+
+              <div class="slice-box">
+                <h3>Slice pads <small id="sliceCount"></small></h3>
+                <div class="slice-pads" id="slicePads"></div>
+              </div>
+
+              <p class="panel-note">Gesture control (Sample mode): left-hand fingers pick slices · pinch + move to scratch · right hand = volume + filter.</p>
+            </div>
+          </section>
+
           <!-- Agents panel -->
           <section class="drawer-panel" data-panel="agents" hidden>
+            <div class="agent-brain-box">
+              <h3>Direct the band</h3>
+              <div class="brain-row">
+                <input id="brainInput" type="text" placeholder="e.g. make it darker, faster, trap, add strings" />
+                <button type="button" id="brainApply" class="apply-button">Apply</button>
+              </div>
+              <p class="panel-note" id="brainStatus">Local command parser — no API key needed.</p>
+              <details class="brain-settings">
+                <summary>Optional: connect an LLM (API key)</summary>
+                <label class="field">Endpoint
+                  <input id="brainEndpoint" type="text" placeholder="https://api.openai.com/v1/chat/completions" />
+                </label>
+                <label class="field">Model
+                  <input id="brainModel" type="text" placeholder="gpt-4o-mini" />
+                </label>
+                <label class="field">API key
+                  <input id="brainKey" type="password" placeholder="sk-…" />
+                </label>
+                <button type="button" id="brainSave" class="apply-button">Save settings</button>
+              </details>
+            </div>
             <p class="panel-note">Backing agents follow your chords and tempo.</p>
             <div class="intensity-box">
               <span class="intensity-label">Band intensity</span>
@@ -308,6 +350,7 @@
                 <li><strong>Duo</strong> two players — P2’s left picks the beat, right rolls drums</li>
                 <li><strong>Band</strong> all agents join you (drums, bass, arp, pad, strings)</li>
                 <li><strong>Beats</strong> drum machine focus — camera optional</li>
+                <li><strong>Sample</strong> import a song — slice, loop, scratch with gestures</li>
                 <li><strong>Cymatics</strong> visualizer takes the stage, camera docks as PiP</li>
               </ul>
             </div>

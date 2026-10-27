@@ -5,7 +5,9 @@ import { BassAgent, ArpAgent, PadAgent, StringsAgent } from './band-agents.js';
 import { CymaticsVisualizer } from './visualizer.js';
 import { SYNTH_PRESETS } from './synth-presets.js';
 import { StudioRecorder } from './recorder.js';
-import { Reverb, pluck } from './effects.js';
+import { SampleDeck } from './sample-deck.js';
+import { parseInstruction, askLLM, loadBrainSettings, saveBrainSettings, hasLLM } from './agent-brain.js';
+import { Reverb, pluck, Bitcrush, Compressor, Chorus, Delay, Overdrive, Phaser, PingPong } from './effects.js';
 import { euclidDrumPattern } from './euclid.js';
 
 const WASM_BASE = '/wasm';
@@ -23,8 +25,8 @@ const PITCH_NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb',
 const KEY_SEMITONES = { C: 0, Db: 1, D: 2, Eb: 3, E: 4, F: 5, Gb: 6, G: 7, Ab: 8, A: 9, Bb: 10, B: 11 };
 const KEY_OPTIONS = Object.keys(KEY_SEMITONES);
 const PATTERN_ORDER = ['trap', 'house', 'hiphop', 'lofi', 'techno'];
-const MODES = ['solo', 'duo', 'band', 'beats', 'cymatics'];
-const DRAWER_TITLES = { sound: 'Sound', beats: 'Beats', agents: 'Agents', guide: 'Guide' };
+const MODES = ['solo', 'duo', 'band', 'beats', 'sample', 'cymatics'];
+const DRAWER_TITLES = { sound: 'Sound', beats: 'Beats', sample: 'Sample', agents: 'Agents', guide: 'Guide' };
 
 const HAND_BONES = [
   [0, 1, 2, 3, 4],
@@ -56,6 +58,30 @@ const euclidSnare = $('euclidSnare');
 const euclidHat = $('euclidHat');
 const euclidRotate = $('euclidRotate');
 const euclidApply = $('euclidApply');
+const beatBrowser = $('beatBrowser');
+const sampleImport = $('sampleImport');
+const sampleFile = $('sampleFile');
+const sampleEmpty = $('sampleEmpty');
+const sampleDeckUI = $('sampleDeckUI');
+const sampleName = $('sampleName');
+const sampleBpm = $('sampleBpm');
+const waveformCanvas = $('waveformCanvas');
+const waveformCursor = $('waveformCursor');
+const samplePlayBtn = $('samplePlay');
+const sampleStopBtn = $('sampleStop');
+const sampleReverseBtn = $('sampleReverse');
+const sampleLoopClearBtn = $('sampleLoopClear');
+const sampleMatchBpmBtn = $('sampleMatchBpm');
+const rateBtns = Array.from(document.querySelectorAll('.rate-btn'));
+const slicePadsEl = $('slicePads');
+const sliceCountEl = $('sliceCount');
+const brainInput = $('brainInput');
+const brainApplyBtn = $('brainApply');
+const brainStatus = $('brainStatus');
+const brainEndpoint = $('brainEndpoint');
+const brainModel = $('brainModel');
+const brainKey = $('brainKey');
+const brainSaveBtn = $('brainSave');
 const bpmInput = $('bpmInput');
 const seqGrid = $('seqGrid');
 const vizCanvas = $('vizCanvas');
@@ -293,6 +319,20 @@ function ensureAudio() {
   reverb.connectFrom(master);
   reverb.connectFrom(studioBus);
 
+  // Parallel FX sends from the chord bus (bap-style effects).
+  const fx = {
+    delay: new Delay(ctx, analyser, { time: 0.3, feedback: 0.4, wet: 0.3 }),
+    chorus: new Chorus(ctx, analyser, { rate: 1.5, depth: 0.003, wet: 0.3 }),
+    phaser: new Phaser(ctx, analyser, { rate: 1.5, depth: 0.3, wet: 0.3 }),
+    overdrive: new Overdrive(ctx, analyser, { drive: 0.6, wet: 0.0 }), // off by default
+    pingpong: new PingPong(ctx, analyser, { wet: 0.0 }), // off by default
+    bitcrush: new Bitcrush(ctx, analyser, { bits: 8, wet: 0.0 }), // off by default
+    compressor: new Compressor(ctx, analyser, { threshold: -18, ratio: 4 }),
+  };
+  Object.values(fx).forEach((effect) => effect.connectFrom?.(master));
+  // Compressor also on the studio bus (gentle glue).
+  fx.compressor.connectFrom(studioBus);
+
   // Gesture filter — its cutoff is played by your right-hand tilt.
   const filter = ctx.createBiquadFilter();
   filter.type = 'lowpass';
@@ -337,6 +377,8 @@ function ensureAudio() {
 
   const recorder = new StudioRecorder(ctx, [master, studioBus]);
 
+  const sampleDeck = new SampleDeck(ctx, studioBus);
+
   const agents = {
     bass: new BassAgent(ctx, studioBus),
     arp: new ArpAgent(ctx, studioBus),
@@ -345,7 +387,7 @@ function ensureAudio() {
   };
   Object.values(agents).forEach((agent) => agent.setIntensity(state.agentIntensity));
 
-  state.audio = { ctx, master, studioBus, reverb, filter, voices, analyser, drums, agents, recorder };
+  state.audio = { ctx, master, studioBus, reverb, fx, filter, voices, analyser, drums, agents, recorder, sampleDeck };
   if (!recorder.supported) recordButton.disabled = true;
   ensureVisualizer(analyser);
   return true;
@@ -515,6 +557,60 @@ function applyDuoHands(lefts, rights) {
   }
 }
 
+// Sample mode gestures: left hand picks slices / pinches to scratch,
+// right hand rides volume + a filter dedicated to the sample deck.
+let lastSlicePlayed = -1;
+let lastScrubX = null;
+
+function applySampleHands(leftLm, rightLm) {
+  const deck = state.audio?.sampleDeck;
+  if (!deck?.ready) return;
+
+  if (rightLm) {
+    const right = classifyRightHand(rightLm);
+    deck.setVolume(Math.max(0.2, right.volume));
+    deck.setFilterHz(clamp(20000 * Math.pow(0.5, 1 - right.filterHz / 6000), 200, 20000));
+  }
+
+  if (!leftLm) {
+    lastSlicePlayed = -1;
+    lastScrubX = null;
+    return;
+  }
+
+  // Pinch (thumb tip near index tip) + horizontal movement = scratch/scrub.
+  const pinchDist = dist(leftLm[4], leftLm[8]);
+  const isPinching = pinchDist < 0.07;
+  if (isPinching) {
+    const x = leftLm[8].x;
+    if (lastScrubX !== null) {
+      const dx = lastScrubX - x; // mirrored view: moving right scrubs forward
+      if (Math.abs(dx) > 0.004) {
+        const pos = clamp(deck.getPosition() + dx * deck.duration, 0, deck.duration);
+        deck.seek(pos);
+      }
+    }
+    lastScrubX = x;
+    setStatus('Scratch…');
+    return;
+  }
+  lastScrubX = null;
+
+  // Finger count picks a slice pad (1-8 mapped over available slices).
+  const fingers = countExtendedFingers(leftLm);
+  if (fingers >= 1 && fingers <= 8) {
+    const maxSlice = Math.min(deck.slices.length, 8);
+    const sliceIndex = Math.min(fingers - 1, maxSlice - 1);
+    if (sliceIndex !== lastSlicePlayed) {
+      lastSlicePlayed = sliceIndex;
+      deck.playSlice(sliceIndex, { loop: true });
+      setStatus(`Slice ${sliceIndex + 1}`);
+    }
+  } else {
+    lastSlicePlayed = -1;
+  }
+}
+
 function processFrame(now) {
   if (video.currentTime === state.lastVideoTime) return;
   state.lastVideoTime = video.currentTime;
@@ -552,6 +648,7 @@ function processFrame(now) {
   }
 
   if (state.mode === 'duo') applyDuoHands(lefts, rights);
+  if (state.mode === 'sample') applySampleHands(leftLm, rightLm);
 
   const duoTag = state.mode === 'duo' ? `  P2 ${lefts[1] || rights[1] ? '●' : '○'}` : '';
   setStatus(`Live · L ${leftLm ? '●' : '○'}  R ${rightLm ? '●' : '○'}${duoTag}`);
@@ -759,6 +856,8 @@ function buildSeqGrid() {
           snare: [...(currentPattern().snare || [])],
           hihat: [...(currentPattern().hihat || [])],
           clap: [...(currentPattern().clap || [])],
+          openhat: [...(currentPattern().openhat || new Array(16).fill(0))],
+          tom: [...(currentPattern().tom || new Array(16).fill(0))],
         };
         custom[row][step] = custom[row][step] ? 0 : 1;
         state.seqCustom = custom;
@@ -839,9 +938,13 @@ function applyMode(mode) {
 
   state._prevMode = mode;
 
-  // Cymatics mode: visualizer front and center, camera docks as PiP.
-  if (mode === 'cymatics' && !state.running) {
-    setStatus('Cymatics mode — start the camera to add gestures');
+  // Sample mode: import a song, slice it, scratch with your hand.
+  if (mode === 'sample') {
+    ensureAudio(); // user gesture — audio allowed
+    openDrawer('sample');
+    if (!state.running) setStatus('Sample mode — import a song');
+  } else if (prevMode === 'sample') {
+    // leaving sample mode — nothing to tear down, deck stays ready
   }
 
   // Hand count changes between solo/duo — rebuild the landmarker live if needed.
@@ -859,6 +962,314 @@ function applyMode(mode) {
       })
       .catch(() => setStatus('Mode switch failed — restart the camera'));
   }
+}
+
+/* ---------- Beat browser & sample deck UI ---------- */
+
+function buildBeatBrowser() {
+  beatBrowser.innerHTML = '';
+  Object.entries(DrumMachine.patterns).forEach(([key, pattern]) => {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'beat-card';
+    card.dataset.pattern = key;
+    if (key === drumPatternSelect.value) card.classList.add('is-active');
+
+    const preview = document.createElement('div');
+    preview.className = 'beat-preview';
+    for (let step = 0; step < 16; step += 1) {
+      const cell = document.createElement('i');
+      if (pattern.kick?.[step]) cell.classList.add('on');
+      else if (pattern.snare?.[step] || pattern.clap?.[step]) cell.classList.add('on', 'alt');
+      else if (pattern.hihat?.[step]) cell.classList.add('on');
+      preview.appendChild(cell);
+    }
+
+    const label = document.createElement('strong');
+    label.textContent = pattern.name;
+    const genre = document.createElement('small');
+    genre.textContent = pattern.genre ?? 'Beat';
+
+    card.appendChild(genre);
+    card.appendChild(label);
+    card.appendChild(preview);
+
+    card.addEventListener('click', () => {
+      drumPatternSelect.value = key;
+      drumPatternSelect.dispatchEvent(new Event('change'));
+      beatBrowser.querySelectorAll('.beat-card').forEach((c) => c.classList.toggle('is-active', c === card));
+    });
+    beatBrowser.appendChild(card);
+  });
+}
+
+let waveformPeaks = null;
+let waveformRaf = null;
+
+function renderWaveform() {
+  const deck = state.audio?.sampleDeck;
+  if (!deck?.ready) return;
+  const rect = waveformCanvas.getBoundingClientRect();
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  waveformCanvas.width = Math.max(1, rect.width * dpr);
+  waveformCanvas.height = Math.max(1, rect.height * dpr);
+  const wctx = waveformCanvas.getContext('2d');
+  wctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const W = rect.width;
+  const H = rect.height;
+
+  // Compute peaks (cached per buffer).
+  if (!waveformPeaks) {
+    const data = deck.buffer.getChannelData(0);
+    const bins = Math.min(600, Math.floor(W));
+    const chunk = Math.floor(data.length / bins);
+    waveformPeaks = new Float32Array(bins);
+    for (let i = 0; i < bins; i += 1) {
+      let peak = 0;
+      for (let j = 0; j < chunk; j += 16) peak = Math.max(peak, Math.abs(data[i * chunk + j] || 0));
+      waveformPeaks[i] = peak;
+    }
+  }
+
+  wctx.fillStyle = '#050a16';
+  wctx.fillRect(0, 0, W, H);
+
+  // Loop region highlight.
+  if (deck.loopRegion) {
+    const x1 = (deck.loopRegion.start / deck.duration) * W;
+    const x2 = (deck.loopRegion.end / deck.duration) * W;
+    wctx.fillStyle = 'rgba(125, 211, 252, 0.14)';
+    wctx.fillRect(x1, 0, x2 - x1, H);
+    wctx.strokeStyle = 'rgba(125, 211, 252, 0.7)';
+    wctx.lineWidth = 1;
+    [x1, x2].forEach((x) => {
+      wctx.beginPath();
+      wctx.moveTo(x, 0);
+      wctx.lineTo(x, H);
+      wctx.stroke();
+    });
+  }
+
+  // Slice markers.
+  if (deck.slices.length > 1) {
+    wctx.strokeStyle = 'rgba(167, 139, 250, 0.35)';
+    deck.slices.forEach((slice) => {
+      const x = (slice.start / deck.duration) * W;
+      wctx.beginPath();
+      wctx.moveTo(x, 0);
+      wctx.lineTo(x, H);
+      wctx.stroke();
+    });
+  }
+
+  // Waveform.
+  wctx.fillStyle = '#7dd3fc';
+  const bins = waveformPeaks.length;
+  const binW = W / bins;
+  for (let i = 0; i < bins; i += 1) {
+    const h = Math.max(1, waveformPeaks[i] * (H * 0.85));
+    wctx.fillRect(i * binW, (H - h) / 2, Math.max(1, binW - 0.5), h);
+  }
+}
+
+function startWaveformLoop() {
+  if (waveformRaf) return;
+  const tick = () => {
+    const deck = state.audio?.sampleDeck;
+    if (deck?.ready) {
+      const pos = deck.getPosition();
+      const rect = waveformCanvas.getBoundingClientRect();
+      waveformCursor.style.left = `${(pos / deck.duration) * rect.width}px`;
+      samplePlayBtn.textContent = deck.playing ? '⏸' : '▶';
+      samplePlayBtn.classList.toggle('is-on', deck.playing);
+    }
+    waveformRaf = requestAnimationFrame(tick);
+  };
+  waveformRaf = requestAnimationFrame(tick);
+}
+
+function updateSampleUI() {
+  const deck = state.audio?.sampleDeck;
+  if (!deck?.ready) {
+    sampleEmpty.hidden = false;
+    sampleDeckUI.hidden = true;
+    return;
+  }
+  sampleEmpty.hidden = true;
+  sampleDeckUI.hidden = false;
+  sampleBpm.textContent = deck.bpm ? `${deck.bpm} BPM` : '— BPM';
+  sliceCountEl.textContent = `${deck.slices.length} slices`;
+  waveformPeaks = null; // recompute peaks for the new buffer
+  renderWaveform();
+
+  // Slice pads.
+  slicePadsEl.innerHTML = '';
+  deck.slices.slice(0, 16).forEach((slice, index) => {
+    const pad = document.createElement('button');
+    pad.type = 'button';
+    pad.className = 'slice-pad';
+    pad.textContent = String(index + 1);
+    pad.addEventListener('click', () => {
+      deck.playSlice(index, { loop: true });
+      pad.classList.add('is-playing');
+      setTimeout(() => pad.classList.remove('is-playing'), 220);
+    });
+    slicePadsEl.appendChild(pad);
+  });
+}
+
+function initSampleUI() {
+  sampleImport.addEventListener('click', () => sampleFile.click());
+
+  sampleFile.addEventListener('change', async () => {
+    const file = sampleFile.files?.[0];
+    if (!file) return;
+    if (!state.audio && !ensureAudio()) {
+      setStatus('Audio unavailable — cannot decode songs');
+      return;
+    }
+    setStatus('Decoding song…');
+    try {
+      const info = await state.audio.sampleDeck.loadFile(file);
+      sampleName.textContent = file.name;
+      updateSampleUI();
+      startWaveformLoop();
+      setStatus(`Loaded: ${file.name} · ${info.bpm} BPM · ${info.slices} slices`);
+    } catch (err) {
+      console.error('Sample load failed', err);
+      setStatus('Could not decode that file — try MP3/WAV/OGG');
+    }
+    sampleFile.value = '';
+  });
+
+  // Waveform: click = seek, drag = set loop region.
+  let dragStartX = null;
+  const xToTime = (clientX) => {
+    const rect = waveformCanvas.getBoundingClientRect();
+    return clamp((clientX - rect.left) / rect.width, 0, 1) * (state.audio?.sampleDeck?.duration || 0);
+  };
+  waveformCanvas.addEventListener('pointerdown', (event) => {
+    dragStartX = event.clientX;
+    waveformCanvas.setPointerCapture(event.pointerId);
+  });
+  waveformCanvas.addEventListener('pointerup', (event) => {
+    const deck = state.audio?.sampleDeck;
+    if (!deck?.ready || dragStartX === null) return;
+    const t1 = xToTime(dragStartX);
+    const t2 = xToTime(event.clientX);
+    if (Math.abs(t2 - t1) < 0.25) {
+      deck.seek(t2); // tap = seek
+    } else {
+      deck.setLoopRegion(Math.min(t1, t2), Math.max(t1, t2)); // drag = loop
+    }
+    renderWaveform();
+    dragStartX = null;
+  });
+
+  samplePlayBtn.addEventListener('click', () => state.audio?.sampleDeck.toggle());
+  sampleStopBtn.addEventListener('click', () => {
+    state.audio?.sampleDeck.stop();
+    renderWaveform();
+  });
+  sampleReverseBtn.addEventListener('click', () => {
+    const deck = state.audio?.sampleDeck;
+    if (!deck) return;
+    deck.setReverse(!deck.isReversed);
+    sampleReverseBtn.classList.toggle('is-on', deck.isReversed);
+    setStatus(deck.isReversed ? 'Sample reversed' : 'Sample forward');
+  });
+  sampleLoopClearBtn.addEventListener('click', () => {
+    state.audio?.sampleDeck.setLoopRegion(null);
+    renderWaveform();
+    setStatus('Loop cleared');
+  });
+  sampleMatchBpmBtn.addEventListener('click', () => {
+    const deck = state.audio?.sampleDeck;
+    if (!deck?.bpm) return;
+    state.bpm = clamp(Math.round(deck.bpm), 50, 200);
+    bpmInput.value = String(state.bpm);
+    syncStudioToState();
+    setStatus(`Drums matched to song: ${state.bpm} BPM`);
+  });
+
+  rateBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.audio?.sampleDeck.setRate(Number(btn.dataset.rate));
+      rateBtns.forEach((b) => b.classList.toggle('is-active', b === btn));
+    });
+  });
+
+  // Re-render waveform on resize.
+  window.addEventListener('resize', () => {
+    waveformPeaks = null;
+    if (state.audio?.sampleDeck?.ready) renderWaveform();
+  });
+}
+
+/* ---------- Agent brain: natural-language direction ---------- */
+
+function applyBrainActions(actions) {
+  if (!actions?.length) return;
+  actions.forEach((a) => {
+    switch (a.type) {
+      case 'mode':
+        applyMode(a.value);
+        break;
+      case 'pattern':
+        if (DrumMachine.patterns[a.value]) {
+          drumPatternSelect.value = a.value;
+          drumPatternSelect.dispatchEvent(new Event('change'));
+        }
+        break;
+      case 'preset':
+        applyPreset(a.value);
+        if (presetSelect.querySelector(`option[value="${a.value}"]`)) presetSelect.value = a.value;
+        break;
+      case 'bpmSet':
+        state.bpm = clamp(Number(a.value) || state.bpm, 50, 200);
+        bpmInput.value = String(state.bpm);
+        syncStudioToState();
+        break;
+      case 'bpmDelta':
+        state.bpm = clamp(state.bpm + (Number(a.value) || 0), 50, 200);
+        bpmInput.value = String(state.bpm);
+        syncStudioToState();
+        break;
+      case 'mood':
+        if (state.left.value) state.left.value.minor = a.value === 'minor';
+        state.musicSignature = '';
+        break;
+      case 'agent':
+        setAgentEnabled(a.value, !!a.on);
+        break;
+      case 'intensity':
+        state.agentIntensity = a.value;
+        if (state.audio) Object.values(state.audio.agents).forEach((ag) => ag.setIntensity(a.value));
+        break;
+      case 'reverb':
+        state.reverbWet = clamp(Number(a.value) || 0, 0, 1);
+        reverbSlider.value = String(Math.round(state.reverbWet * 100));
+        reverbValue.textContent = `${reverbSlider.value}%`;
+        state.audio?.reverb.setWet(state.reverbWet);
+        break;
+      case 'groove':
+        if (state.audio) state.audio.drums.swing = clamp(Number(a.value) || 0, 0, 0.2);
+        break;
+      case 'tuning':
+        state.tuning = a.value;
+        tuningSelect.value = a.value;
+        state.musicSignature = '';
+        break;
+      case 'fills':
+        if (state.audio) state.audio.drums.setFills(!!a.value);
+        fillsToggle.checked = !!a.value;
+        break;
+      default:
+        break;
+    }
+  });
+  setStatus('Band directed');
 }
 
 /* ---------- Controls wiring ---------- */
@@ -925,6 +1336,18 @@ function initControls() {
     setStatus(`Tuning: ${TUNINGS[state.tuning]?.name ?? state.tuning}`);
   });
 
+  // FX chain toggles.
+  document.querySelectorAll('.fx-chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const name = chip.dataset.fx;
+      const on = !chip.classList.contains('is-active');
+      chip.classList.toggle('is-active', on);
+      const wet = on ? 0.35 : 0;
+      state.audio?.fx?.[name]?.setWet(wet);
+      setStatus(`${chip.textContent}: ${on ? 'on' : 'off'}`);
+    });
+  });
+
   // Reverb wet/dry on the whole mix.
   reverbSlider.addEventListener('input', () => {
     const wet = Number(reverbSlider.value) / 100;
@@ -933,7 +1356,42 @@ function initControls() {
     state.audio?.reverb.setWet(wet);
   });
 
-  // Euclidean rhythm generator (Beet.js-style Bjorklund).
+  // Agent brain.
+  const settings = loadBrainSettings();
+  brainEndpoint.value = settings.endpoint || '';
+  brainModel.value = settings.model || '';
+  brainKey.value = settings.key || '';
+  brainStatus.textContent = hasLLM(settings)
+    ? 'LLM connected — natural language will be interpreted by the model.'
+    : 'Local command parser — no API key needed.';
+
+  brainApplyBtn.addEventListener('click', async () => {
+    const instruction = brainInput.value.trim();
+    if (!instruction) return;
+    brainStatus.textContent = 'Thinking…';
+    const s = loadBrainSettings();
+    let actions = null;
+    if (hasLLM(s)) {
+      actions = await askLLM(s, instruction);
+    }
+    if (!actions) actions = parseInstruction(instruction);
+    applyBrainActions(actions);
+    brainStatus.textContent = hasLLM(s)
+      ? `Applied: ${actions.length} action(s)${actions === parseInstruction(instruction) ? ' (local fallback)' : ''}`
+      : `Applied ${actions.length} action(s) via local parser`;
+  });
+
+  brainSaveBtn.addEventListener('click', () => {
+    saveBrainSettings({
+      endpoint: brainEndpoint.value.trim(),
+      model: brainModel.value.trim(),
+      key: brainKey.value.trim(),
+    });
+    const s = loadBrainSettings();
+    brainStatus.textContent = hasLLM(s)
+      ? 'Settings saved — LLM connected.'
+      : 'Settings saved — using local parser (no endpoint/key).';
+  });
   euclidApply.addEventListener('click', () => {
     const pattern = euclidDrumPattern({
       kickPulses: Number(euclidKick.value) || 0,
@@ -1020,6 +1478,8 @@ function initControls() {
   });
 
   buildSeqGrid();
+  buildBeatBrowser();
+  initSampleUI();
 
   startButton.addEventListener('click', toggleCamera);
 

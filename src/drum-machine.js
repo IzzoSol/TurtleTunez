@@ -18,6 +18,8 @@ const PATTERNS = {
     snare: [0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0],
     hihat: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
     clap: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    openhat: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
+    tom: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
   },
   trapHeavy: {
     name: 'Trap Heavy', genre: 'Trap',
@@ -33,6 +35,8 @@ const PATTERNS = {
     snare: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
     hihat: [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
     clap: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+    openhat: [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0],
+    tom: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
   },
   houseDeep: {
     name: 'House Deep', genre: 'House',
@@ -217,7 +221,7 @@ const PATTERNS = {
   },
 };
 
-const DRUM_ROWS = ['kick', 'snare', 'hihat', 'clap'];
+const DRUM_ROWS = ['kick', 'snare', 'hihat', 'clap', 'openhat', 'tom'];
 
 export class DrumMachine {
   constructor(ctx, destination) {
@@ -334,6 +338,8 @@ export class DrumMachine {
       case 'snare': return this._snare(t);
       case 'hihat': return this._hihat(t);
       case 'clap': return this._clap(t);
+      case 'openhat': return this._openhat(t);
+      case 'tom': return this._tom(t);
       default: return null;
     }
   }
@@ -406,5 +412,28 @@ export class DrumMachine {
       src.start(start);
       src.stop(start + 0.14);
     }
+  }
+
+  _openhat(t) {
+    const src = this.ctx.createBufferSource();
+    src.buffer = this._noise;
+    const hp = this.ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 6800;
+    const g = this._env(t, 0.002, 0.32, 0.3);
+    src.connect(hp).connect(g);
+    src.start(t);
+    src.stop(t + 0.4);
+  }
+
+  _tom(t) {
+    const osc = this.ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(220, t);
+    osc.frequency.exponentialRampToValueAtTime(90, t + 0.22);
+    const g = this._env(t, 0.002, 0.25, 0.75);
+    osc.connect(g);
+    osc.start(t);
+    osc.stop(t + 0.3);
   }
 }
