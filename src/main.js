@@ -1774,18 +1774,27 @@ function initControls() {
   function closeOnboard() {
     onboardBackdrop.hidden = true;
     onboardBackdrop.style.display = 'none';
+    onboardBackdrop.style.visibility = 'hidden';
+    onboardBackdrop.style.pointerEvents = 'none';
+    onboardBackdrop.remove();
     localStorage.setItem('turtleTunez.onboarded', '1');
   }
-  onboardNext.addEventListener('click', () => {
+  onboardNext.addEventListener('click', (e) => {
+    e.stopPropagation();
     if (onboardIndex === onboardSteps.length - 1) closeOnboard();
     else showOnboardStep(onboardIndex + 1);
   });
-  onboardPrev.addEventListener('click', () => showOnboardStep(onboardIndex - 1));
-  onboardSkip.addEventListener('click', closeOnboard);
-  if (!localStorage.getItem('turtleTunez.onboarded')) {
-    onboardBackdrop.hidden = false;
-    showOnboardStep(0);
-  }
+  onboardPrev.addEventListener('click', (e) => { e.stopPropagation(); showOnboardStep(onboardIndex - 1); });
+  onboardSkip.addEventListener('click', (e) => { e.stopPropagation(); closeOnboard(); });
+
+  // Fallback: clicking outside the card also dismisses.
+  onboardBackdrop.addEventListener('click', (e) => {
+    if (e.target === onboardBackdrop) closeOnboard();
+  });
+  // Escape key dismisses the tour.
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !onboardBackdrop.hidden) closeOnboard();
+  });
 
   // ---- User presets (save/load/delete) ----
   const soundPanel = document.querySelector('.drawer-panel[data-panel="sound"]');
