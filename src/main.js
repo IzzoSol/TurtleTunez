@@ -930,6 +930,8 @@ function openDrawer(tab) {
   drawerTitle.textContent = DRAWER_TITLES[tab] ?? tab;
   drawer.classList.add('is-open');
   drawer.setAttribute('aria-hidden', 'false');
+  const backdrop = $('drawerBackdrop');
+  if (backdrop) backdrop.classList.add('is-open');
   railBtns.forEach((btn) => btn.classList.toggle('is-active', btn.dataset.tab === tab));
   document.querySelectorAll('.drawer-panel').forEach((panel) => {
     panel.hidden = panel.dataset.panel !== tab;
@@ -940,6 +942,8 @@ function closeDrawer() {
   state.activeTab = null;
   drawer.classList.remove('is-open');
   drawer.setAttribute('aria-hidden', 'true');
+  const backdrop = $('drawerBackdrop');
+  if (backdrop) backdrop.classList.remove('is-open');
   railBtns.forEach((btn) => btn.classList.remove('is-active'));
 }
 
@@ -1670,6 +1674,10 @@ function initControls() {
   });
 
   drawerClose.addEventListener('click', closeDrawer);
+  const drawerBackdrop = $('drawerBackdrop');
+  if (drawerBackdrop) {
+    drawerBackdrop.addEventListener('click', closeDrawer);
+  }
   window.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && state.activeTab) closeDrawer();
   });
