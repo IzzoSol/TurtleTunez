@@ -4,6 +4,14 @@
    TurtleTunez — Gesture Studio design system
    ============================================================ */
 
+/* The `hidden` attribute must always win. Class-level `display` rules
+   (e.g. .drawer-panel { display:flex }) outrank the UA default and silently
+   un-hide toggled elements — this has broken the onboarding overlay and the
+   drawer panels more than once. This guard keeps it from recurring. */
+[hidden] {
+  display: none !important;
+}
+
 :root {
   --bg-950: #03060f;
   --bg-900: #070b16;
