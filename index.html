@@ -8,7 +8,8 @@
       name="description"
       content="TurtleTunez is a browser-based gesture-controlled music instrument built with MediaPipe and Web Audio."
     />
-    <link rel="stylesheet" href="/src/styles.css" />
+    <script type="module" crossorigin src="/TurtleTunez/assets/index-CXaaaNCm.js"></script>
+    <link rel="stylesheet" crossorigin href="/TurtleTunez/assets/index-tIhyDTvg.css">
   </head>
   <body>
     <div class="app">
@@ -30,6 +31,8 @@
           <button type="button" class="mode-chip" data-mode="sample">Sample</button>
           <button type="button" class="mode-chip" data-mode="cymatics">Cymatics</button>
           <button type="button" class="mode-chip" data-mode="muse">Muse</button>
+          <button type="button" class="mode-chip" data-mode="melody">Hum &amp; Riff</button>
+          <button type="button" class="mode-chip is-soon" data-mode="room" aria-disabled="true" title="Play in your room, in the space around you — coming soon">Room — Coming Soon</button>
         </nav>
 
         <div class="topbar-right">
@@ -70,6 +73,7 @@
           <button type="button" class="rail-btn is-active" data-tab="sound" aria-label="Sound panel" title="Sound"><span class="rail-icon">🎛</span><small>Sound</small></button>
           <button type="button" class="rail-btn" data-tab="beats" aria-label="Beats panel" title="Beats"><span class="rail-icon">🥁</span><small>Beats</small></button>
           <button type="button" class="rail-btn" data-tab="sample" aria-label="Sample panel" title="Sample"><span class="rail-icon">🎵</span><small>Sample</small></button>
+          <button type="button" class="rail-btn" data-tab="melody" aria-label="Hum and Riff panel" title="Hum & Riff"><span class="rail-icon">🎤</span><small>Hum &amp; Riff</small></button>
           <button type="button" class="rail-btn" data-tab="agents" aria-label="Agents panel" title="Agents"><span class="rail-icon">🤖</span><small>Agents</small></button>
           <button type="button" class="rail-btn" data-tab="guide" aria-label="Guide panel" title="Guide"><span class="rail-icon">❓</span><small>Guide</small></button>
         </nav>
@@ -139,6 +143,11 @@
                 <optgroup label="Bells">
                   <option value="fmBell">FM Bell</option>
                   <option value="vibraphone">Vibraphone</option>
+                </optgroup>
+                <optgroup label="New Characters">
+                  <option value="loftKeys">Loft Keys</option>
+                  <option value="softPluck">Soft Pluck</option>
+                  <option value="airyChoir">Airy Choir</option>
                 </optgroup>
               </select>
             </label>
@@ -303,6 +312,118 @@
             </div>
           </section>
 
+          <!-- Hum & Riff panel -->
+          <section class="drawer-panel" data-panel="melody" hidden>
+            <p class="panel-note">Hum a melody, play a guitar riff one note at a time, or drop in a recording — it hears the notes, performs them back live, and captures them below. Single notes only: chords are heard as their strongest note.</p>
+
+            <div class="melody-live-box">
+              <div class="melody-readout">
+                <div class="melody-note" id="melodyNote">—</div>
+                <div class="melody-meta">
+                  <span id="melodyFreq">— Hz</span>
+                  <span id="melodyCents">— cents</span>
+                  <span id="melodyTuned"></span>
+                </div>
+              </div>
+              <canvas id="melodyScope" class="melody-scope"></canvas>
+              <div class="melody-conf-row">
+                <span>Confidence</span>
+                <div class="melody-conf-track"><div class="melody-conf-fill" id="melodyConfFill"></div></div>
+                <strong id="melodyConfText">0%</strong>
+              </div>
+            </div>
+
+            <label class="field">
+              Input
+              <select id="melodySource">
+                <option value="hum">Hum / Voice</option>
+                <option value="guitar">Guitar</option>
+                <option value="line">Line / File</option>
+              </select>
+            </label>
+
+            <div class="melody-btn-row">
+              <button type="button" class="apply-button melody-mic-btn" id="melodyMicBtn">🎙 Start mic</button>
+              <button type="button" class="transport-btn" id="melodyStopBtn">Stop mic</button>
+              <button type="button" class="transport-btn" id="melodyFileBtn">⬆ Riff file</button>
+              <input type="file" id="melodyFileInput" accept="audio/*" hidden />
+            </div>
+
+            <div class="melody-toggles">
+              <label class="toggle-field"><input type="checkbox" id="melodyCleanToggle" checked /><span>Mic smoothing (off for guitar)</span></label>
+              <label class="toggle-field"><input type="checkbox" id="melodyPerformToggle" checked /><span>Perform live as I hum / play</span></label>
+              <label class="toggle-field"><input type="checkbox" id="melodyCaptureToggle" checked /><span>Capture to piano roll</span></label>
+              <label class="toggle-field"><input type="checkbox" id="melodyQScaleToggle" checked /><span>Snap to key / scale</span></label>
+              <label class="toggle-field"><input type="checkbox" id="melodyQTimeToggle" /><span>Snap timing to BPM grid (16ths)</span></label>
+              <label class="toggle-field"><input type="checkbox" id="melodyLoopToggle" /><span>Loop playback</span></label>
+            </div>
+
+            <div class="beat-row">
+              <label class="field">Melody key
+                <select id="melodyKeySelect"></select>
+              </label>
+              <label class="field">Scale
+                <select id="melodyScaleSelect"></select>
+              </label>
+            </div>
+
+            <div class="melody-tune-box">
+              <h3>Autotune my voice</h3>
+              <p class="panel-note">Corrects the performed voice to the key and scale above — it tunes the synth voice that plays your melody back, not the raw mic sound (your mic is never sent to the speakers).</p>
+              <div class="melody-toggles">
+                <label class="toggle-field"><input type="checkbox" id="melodyAutotuneToggle" /><span>Autotune on</span></label>
+                <label class="toggle-field"><input type="checkbox" id="melodyVibratoToggle" checked /><span>Vibrato guard (tune the centre, not the wobble)</span></label>
+              </div>
+              <label class="field">
+                Strength <span id="melodyTuneStrengthValue" class="field-value">100%</span>
+                <input id="melodyTuneStrength" type="range" min="0" max="100" step="1" value="100" />
+              </label>
+              <label class="field">
+                Speed <span id="melodyTuneSpeedValue" class="field-value">60 ms</span>
+                <input id="melodyTuneSpeed" type="range" min="0" max="300" step="5" value="60" />
+              </label>
+              <p class="panel-note">Fast speed + full strength = the hard robotic tune. Slow + gentle = a nudge toward the note.</p>
+              <div class="melody-toggles">
+                <label class="toggle-field"><input type="checkbox" id="melodyHarmThird" /><span>Harmony: +Third (follows the scale)</span></label>
+                <label class="toggle-field"><input type="checkbox" id="melodyHarmFifth" /><span>Harmony: +Fifth</span></label>
+                <label class="toggle-field"><input type="checkbox" id="melodyHarmOctave" /><span>Harmony: +Octave</span></label>
+              </div>
+              <button type="button" class="transport-btn" id="melodyTuneTakeBtn">Autotune my take</button>
+            </div>
+
+            <div class="melody-roll-box">
+              <h3>Piano roll <small id="melodyCount">0 notes</small></h3>
+              <canvas id="melodyRoll" class="melody-roll"></canvas>
+            </div>
+
+            <div class="melody-btn-row">
+              <button type="button" class="transport-btn" id="melodyPlayBtn">▶ Play</button>
+              <button type="button" class="transport-btn" id="melodyStopPlayBtn">■ Stop</button>
+              <button type="button" class="transport-btn" id="melodyClearBtn">Clear</button>
+            </div>
+            <div class="melody-btn-row">
+              <button type="button" class="apply-button" id="melodySendBtn">Send to Band</button>
+              <button type="button" class="transport-btn" id="melodyMidiBtn">Download MIDI</button>
+              <button type="button" class="transport-btn" id="melodyCopyBtn">Copy notes</button>
+            </div>
+
+            <div class="melody-game-box">
+              <h3>Play</h3>
+              <p class="panel-note"><strong>Pitch Match</strong> — hear a note, then hum or play it. Hold it within ±25 cents for a moment to score.</p>
+              <div class="melody-btn-row">
+                <button type="button" class="transport-btn" id="melodyMatchBtn">▶ New target note</button>
+                <button type="button" class="transport-btn" id="melodyMatchReplayBtn">↻ Hear it again</button>
+              </div>
+              <p class="panel-note" id="melodyMatchStatus">Target: — · Best streak: 0</p>
+              <p class="panel-note"><strong>Call &amp; Response</strong> — the studio plays a short phrase, you echo it note by note.</p>
+              <div class="melody-btn-row">
+                <button type="button" class="transport-btn" id="melodyEchoBtn">▶ Play a phrase</button>
+              </div>
+              <p class="panel-note" id="melodyEchoStatus">No phrase yet.</p>
+            </div>
+            <p class="panel-note" id="melodyStatus">Pick Hum or Guitar, start the mic, and sing or play one note at a time.</p>
+          </section>
+
           <!-- Agents panel -->
           <section class="drawer-panel" data-panel="agents" hidden>
             <div class="agent-brain-box">
@@ -331,6 +452,53 @@
                   <input id="brainKey" type="password" placeholder="sk-…" />
                 </label>
                 <button type="button" id="brainSave" class="apply-button">Save settings</button>
+              </details>
+            </div>
+            <div class="composer-box">
+              <h3>Bot Composer</h3>
+              <p class="panel-note">A bot composes a full piece for you — tempo, key, beat, character and a lead melody in the piano roll — from your own words. Your key stays on this device and is only sent to the provider you pick. No key? Compose locally works offline.</p>
+              <div class="provider-row" role="group" aria-label="Composer provider">
+                <button type="button" class="provider-chip composer-chip" data-cprovider="grok">Grok</button>
+                <button type="button" class="provider-chip composer-chip" data-cprovider="openai">OpenAI</button>
+                <button type="button" class="provider-chip composer-chip" data-cprovider="anthropic">Claude</button>
+                <button type="button" class="provider-chip composer-chip" data-cprovider="nvidia">Nvidia</button>
+                <button type="button" class="provider-chip composer-chip" data-cprovider="ollama">Ollama (local)</button>
+                <button type="button" class="provider-chip composer-chip" data-cprovider="custom">Custom Bot</button>
+              </div>
+              <label class="field">Endpoint
+                <input id="composerEndpoint" type="text" placeholder="https://api.x.ai/v1/chat/completions" />
+              </label>
+              <label class="field">Model
+                <input id="composerModel" type="text" placeholder="grok-3" />
+              </label>
+              <label class="field">API key
+                <input id="composerKey" type="password" placeholder="Paste your key — stored only on this device" />
+              </label>
+              <label class="field">Bot instructions
+                <textarea id="composerInstructions" rows="2">You are a working songwriter and producer inside a browser music studio. Compose pieces a beginner can hum along to: strong motif, clear repetition, melodies that land on the tonic.</textarea>
+              </label>
+              <div class="composer-starters" role="group" aria-label="Prompt starters">
+                <button type="button" class="provider-chip starter-chip" data-starter="lofi">Lo-fi dreamy hook</button>
+                <button type="button" class="provider-chip starter-chip" data-starter="trap">Trap riff</button>
+                <button type="button" class="provider-chip starter-chip" data-starter="jazz">Jazzy chords</button>
+                <button type="button" class="provider-chip starter-chip" data-starter="ambient">Ambient pad journey</button>
+              </div>
+              <label class="field">Your prompt
+                <textarea id="composerPrompt" rows="3" placeholder="Describe the piece — mood, story, energy, anything. The bot fills in the notes."></textarea>
+              </label>
+              <div class="melody-btn-row">
+                <button type="button" class="apply-button" id="composerComposeBtn">✨ Compose with my bot</button>
+                <button type="button" class="transport-btn" id="composerLocalBtn">Compose locally (no key)</button>
+                <button type="button" class="transport-btn" id="composerTestBtn">Test connection</button>
+              </div>
+              <div class="melody-btn-row">
+                <button type="button" class="transport-btn" id="composerAnswerBtn">Bot, answer my melody</button>
+                <label class="toggle-field"><input type="checkbox" id="composerAutoplayToggle" checked /><span>Play it when ready</span></label>
+              </div>
+              <p class="panel-note" id="composerStatus">Pick a provider, add your key, write a prompt — or compose locally with no key at all.</p>
+              <details class="brain-settings" id="composerRawBox" hidden>
+                <summary>Bot said (raw reply)</summary>
+                <pre class="composer-raw" id="composerRawText"></pre>
               </details>
             </div>
             <p class="panel-note">Backing agents follow your chords and tempo.</p>
@@ -390,6 +558,21 @@
                 <li><strong>Beats</strong> drum machine focus — camera optional</li>
                 <li><strong>Sample</strong> import a song — slice, loop, scratch with gestures</li>
                 <li><strong>Cymatics</strong> visualizer takes the stage, camera docks as PiP</li>
+                <li><strong>Hum &amp; Riff</strong> hum, sing, or play guitar one note at a time — it performs and captures your melody</li>
+                <li><strong>Room — COMING SOON (PROPOSAL, not live)</strong> play in your room, in the space around you: the studio floating in your room, the piano roll on your desk, hum, guitar and gestures played in space. Not built yet — the chip in the mode row is a placeholder only, and there is no in-room or camera-passthrough view today.</li>
+              </ul>
+            </div>
+
+            <div class="guide-box">
+              <h3>Hum &amp; Riff</h3>
+              <ul>
+                <li><strong>Start mic</strong> choose Hum / Voice or Guitar first</li>
+                <li><strong>Perform</strong> notes play back live as you hum or pick</li>
+                <li><strong>Capture</strong> notes land in the piano roll — click one to delete it</li>
+                <li><strong>Riff file</strong> drop in a recording and it finds the notes for you</li>
+                <li><strong>Play / Loop</strong> hear it through the current Character sound</li>
+                <li><strong>Send to Band</strong> sets the key from your melody, exports as MIDI too</li>
+                <li>Single notes only — chords are heard as their strongest note</li>
               </ul>
             </div>
 
@@ -432,7 +615,7 @@
         <div class="onboard-step" data-step="3">
           <div class="onboard-glyph">🎛</div>
           <h3>Pick a mode</h3>
-          <p>Solo, Duo, Band (agents join you), Beats (drum machine focus), Sample (import a song), Cymatics (visuals), Muse (auto-composes). Pop out the right drawer for sound, beats, agents, and the guide.</p>
+          <p>Solo, Duo, Band (agents join you), Beats (drum machine focus), Sample (import a song), Cymatics (visuals), Muse (auto-composes), Hum &amp; Riff (hum or play guitar and it performs your melody). Pop out the right drawer for sound, beats, agents, and the guide.</p>
         </div>
         <div class="onboard-nav">
           <div class="onboard-dots">
@@ -446,6 +629,5 @@
       </div>
     </div>
 
-    <script type="module" src="/src/main.js"></script>
   </body>
 </html>
