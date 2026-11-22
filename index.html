@@ -4,12 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TurtleTunez — Gesture Studio</title>
+    <link rel="icon" type="image/svg+xml" href="/TurtleTunez/favicon.svg" />
     <meta
       name="description"
       content="TurtleTunez is a browser-based gesture-controlled music instrument built with MediaPipe and Web Audio."
     />
-    <script type="module" crossorigin src="/TurtleTunez/assets/index-CXaaaNCm.js"></script>
-    <link rel="stylesheet" crossorigin href="/TurtleTunez/assets/index-tIhyDTvg.css">
+    <script type="module" crossorigin src="/TurtleTunez/assets/index-Dw-JzUG5.js"></script>
+    <link rel="stylesheet" crossorigin href="/TurtleTunez/assets/index-EF_T0bM1.css">
   </head>
   <body>
     <div class="app">
@@ -30,10 +31,16 @@
           <button type="button" class="mode-chip" data-mode="beats">Beats</button>
           <button type="button" class="mode-chip" data-mode="sample">Sample</button>
           <button type="button" class="mode-chip" data-mode="cymatics">Cymatics</button>
-          <button type="button" class="mode-chip" data-mode="muse">Muse</button>
+          <button type="button" class="mode-chip" data-mode="muse">AI</button>
           <button type="button" class="mode-chip" data-mode="melody">Hum &amp; Riff</button>
           <button type="button" class="mode-chip is-soon" data-mode="room" aria-disabled="true" title="Play in your room, in the space around you — coming soon">Room — Coming Soon</button>
         </nav>
+
+        <div class="ui-theme-switch" role="group" aria-label="Theme">
+          <button type="button" class="ui-theme-btn is-active" data-ui-theme="emerald" aria-pressed="true"><i class="ui-theme-dot dot-emerald"></i>Emerald</button>
+          <button type="button" class="ui-theme-btn" data-ui-theme="light" aria-pressed="false"><i class="ui-theme-dot dot-light"></i>Light</button>
+          <button type="button" class="ui-theme-btn" data-ui-theme="gold" aria-pressed="false"><i class="ui-theme-dot dot-gold"></i>Gold</button>
+        </div>
 
         <div class="topbar-right">
           <div class="bpm-pill" title="Tempo">
@@ -49,6 +56,9 @@
       <!-- ======= Studio stage ======= -->
       <div class="studio">
         <main class="stage" id="stage" data-mode="solo">
+          <!-- Aurora field behind the stage (pure CSS, sits under the camera) -->
+          <div class="stage-aurora" aria-hidden="true"></div>
+
           <!-- Camera (full stage, or PiP in Cymatics mode) -->
           <div class="camera-wrap" id="cameraWrap">
             <video id="video" autoplay playsinline muted></video>
@@ -185,11 +195,11 @@
                 <button type="button" class="layout-chip is-active" data-layout="right">Right rail</button>
                 <button type="button" class="layout-chip" data-layout="bottom">Bottom bar</button>
                 <button type="button" class="layout-chip" data-layout="expand">Expand</button>
-               <div class="rail-style-toggle" role="group" aria-label="Rail style" style="display:flex;gap:6px;margin-top:10px">
-                 <button type="button" class="layout-chip is-active" data-railstyle="labeled">Labeled</button>
-                 <button type="button" class="layout-chip" data-railstyle="compact">Compact</button>
-                 <button type="button" class="layout-chip" data-railstyle="expanded">Wide</button>
-               </div>
+              </div>
+              <div class="rail-style-toggle" role="group" aria-label="Rail style" style="display:flex;gap:6px;margin-top:10px">
+                <button type="button" class="layout-chip is-active" data-railstyle="labeled">Labeled</button>
+                <button type="button" class="layout-chip" data-railstyle="compact">Compact</button>
+                <button type="button" class="layout-chip" data-railstyle="expanded">Wide</button>
               </div>
             </div>
 
@@ -414,12 +424,23 @@
                 <button type="button" class="transport-btn" id="melodyMatchBtn">▶ New target note</button>
                 <button type="button" class="transport-btn" id="melodyMatchReplayBtn">↻ Hear it again</button>
               </div>
+              <div class="melody-meter" id="melodyMatchMeter">
+                <div class="melody-meter-band" title="In-tune band: ±25 cents"></div>
+                <div class="melody-meter-needle" id="melodyMatchNeedle" style="left: 50%"></div>
+              </div>
+              <div class="melody-meter-labels"><span>−50¢ flat</span><span>in tune ±25¢</span><span>+50¢ sharp</span></div>
               <p class="panel-note" id="melodyMatchStatus">Target: — · Best streak: 0</p>
               <p class="panel-note"><strong>Call &amp; Response</strong> — the studio plays a short phrase, you echo it note by note.</p>
               <div class="melody-btn-row">
                 <button type="button" class="transport-btn" id="melodyEchoBtn">▶ Play a phrase</button>
+                <button type="button" class="transport-btn" id="melodyEchoReplayBtn">↻ Hear it again</button>
               </div>
+              <div class="melody-echo-dots" id="melodyEchoDots" aria-hidden="true"></div>
               <p class="panel-note" id="melodyEchoStatus">No phrase yet.</p>
+            </div>
+            <div class="melody-composer-link">
+              <p class="panel-note">Want the AI to write the next part? The AI composer takes your prompt and adds to the melody you captured above.</p>
+              <button type="button" class="transport-btn" id="melodyComposerLinkBtn">✨ Open AI composer</button>
             </div>
             <p class="panel-note" id="melodyStatus">Pick Hum or Guitar, start the mic, and sing or play one note at a time.</p>
           </section>
@@ -439,6 +460,7 @@
                   <button type="button" class="provider-chip" data-provider="openai">OpenAI</button>
                   <button type="button" class="provider-chip" data-provider="grok">Grok (xAI)</button>
                   <button type="button" class="provider-chip" data-provider="anthropic">Anthropic</button>
+                  <button type="button" class="provider-chip" data-provider="nvidia">Nvidia</button>
                   <button type="button" class="provider-chip" data-provider="ollama">Ollama (local)</button>
                   <button type="button" class="provider-chip" data-provider="custom">Custom</button>
                 </div>
@@ -488,7 +510,7 @@
               </label>
               <div class="melody-btn-row">
                 <button type="button" class="apply-button" id="composerComposeBtn">✨ Compose with my bot</button>
-                <button type="button" class="transport-btn" id="composerLocalBtn">Compose locally (no key)</button>
+                <button type="button" class="transport-btn" id="composerLocalBtn">Compose locally</button>
                 <button type="button" class="transport-btn" id="composerTestBtn">Test connection</button>
               </div>
               <div class="melody-btn-row">
@@ -558,6 +580,7 @@
                 <li><strong>Beats</strong> drum machine focus — camera optional</li>
                 <li><strong>Sample</strong> import a song — slice, loop, scratch with gestures</li>
                 <li><strong>Cymatics</strong> visualizer takes the stage, camera docks as PiP</li>
+                <li><strong>AI</strong> auto-composes — the band writes its own chord progression while you play</li>
                 <li><strong>Hum &amp; Riff</strong> hum, sing, or play guitar one note at a time — it performs and captures your melody</li>
                 <li><strong>Room — COMING SOON (PROPOSAL, not live)</strong> play in your room, in the space around you: the studio floating in your room, the piano roll on your desk, hum, guitar and gestures played in space. Not built yet — the chip in the mode row is a placeholder only, and there is no in-room or camera-passthrough view today.</li>
               </ul>
@@ -615,7 +638,7 @@
         <div class="onboard-step" data-step="3">
           <div class="onboard-glyph">🎛</div>
           <h3>Pick a mode</h3>
-          <p>Solo, Duo, Band (agents join you), Beats (drum machine focus), Sample (import a song), Cymatics (visuals), Muse (auto-composes), Hum &amp; Riff (hum or play guitar and it performs your melody). Pop out the right drawer for sound, beats, agents, and the guide.</p>
+          <p>Solo, Duo, Band (agents join you), Beats (drum machine focus), Sample (import a song), Cymatics (visuals), AI (auto-composes), Hum &amp; Riff (hum or play guitar and it performs your melody). Pop out the right drawer for sound, beats, agents, and the guide.</p>
         </div>
         <div class="onboard-nav">
           <div class="onboard-dots">
