@@ -9,8 +9,8 @@
       name="description"
       content="TurtleTunez is a browser-based gesture-controlled music instrument built with MediaPipe and Web Audio."
     />
-    <script type="module" crossorigin src="/TurtleTunez/assets/index-_-9PBy5P.js"></script>
-    <link rel="stylesheet" crossorigin href="/TurtleTunez/assets/index-nbIQXMJD.css">
+    <script type="module" crossorigin src="/TurtleTunez/assets/index-ClTrZQoo.js"></script>
+    <link rel="stylesheet" crossorigin href="/TurtleTunez/assets/index-DVsOxHDF.css">
   </head>
   <body>
     <div class="app">
@@ -324,7 +324,7 @@
 
           <!-- Hum & Riff panel -->
           <section class="drawer-panel" data-panel="melody" hidden>
-            <p class="panel-note">Hum a melody, play a guitar riff one note at a time, or drop in a recording — it hears the notes, performs them back live, and captures them below. Single notes only: chords are heard as their strongest note.</p>
+            <p class="panel-note">Hum a melody, play a guitar riff one note at a time, or drop in a recording — it hears the notes, performs them back live, and captures them below. Single notes only: chords are heard as their strongest note. <strong>Autotune is in this panel</strong> — tap the Autotune button below to jump straight to it. No camera needed: the mic works on its own.</p>
 
             <div class="melody-live-box">
               <div class="melody-readout">
@@ -356,6 +356,7 @@
               <button type="button" class="apply-button melody-mic-btn" id="melodyMicBtn">🎙 Start mic</button>
               <button type="button" class="transport-btn" id="melodyStopBtn">Stop mic</button>
               <button type="button" class="transport-btn" id="melodyFileBtn">⬆ Riff file</button>
+              <button type="button" class="transport-btn" id="melodyAutotuneJump">✨ Autotune</button>
               <input type="file" id="melodyFileInput" accept="audio/*" hidden />
             </div>
 
@@ -377,8 +378,8 @@
               </label>
             </div>
 
-            <div class="melody-tune-box">
-              <h3>Autotune my voice</h3>
+            <div class="melody-tune-box" id="melodyTuneBox">
+              <h3>✨ Autotune</h3>
               <p class="panel-note">Corrects the performed voice to the key and scale above — it tunes the synth voice that plays your melody back, not the raw mic sound (your mic is never sent to the speakers).</p>
               <div class="melody-toggles">
                 <label class="toggle-field"><input type="checkbox" id="melodyAutotuneToggle" /><span>Autotune on</span></label>
@@ -589,7 +590,8 @@
             <div class="guide-box">
               <h3>Hum &amp; Riff</h3>
               <ul>
-                <li><strong>Start mic</strong> choose Hum / Voice or Guitar first</li>
+                <li><strong>Start mic</strong> choose Hum / Voice or Guitar first — the mic works on its own, no camera needed</li>
+                <li><strong>Autotune</strong> in the Hum &amp; Riff panel — tap the ✨ Autotune button to jump to it: it corrects the performed voice to the key, with strength, speed and harmony controls, plus one-tap Autotune my take</li>
                 <li><strong>Perform</strong> notes play back live as you hum or pick</li>
                 <li><strong>Capture</strong> notes land in the piano roll — click one to delete it</li>
                 <li><strong>Riff file</strong> drop in a recording and it finds the notes for you</li>
